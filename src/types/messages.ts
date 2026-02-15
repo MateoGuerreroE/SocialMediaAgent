@@ -2,7 +2,7 @@ import { MessageSource, Platform, PlatformChannel } from '../generated/prisma/en
 
 export type EventType = 'created' | 'updated' | 'deleted';
 
-export type ApplicationEventContent = {
+export type SocialMediaEventContent = {
   text: string;
   originalType: 'text' | 'audio' | 'image';
   originalContentUrl?: string; // URL to the original content if it's not texts
@@ -13,14 +13,14 @@ export interface SocialMediaEvent {
   messageId: string; // ID to have the message created in the system
   eventType: EventType;
   targetId: string; // Either senderId or commentId -> This is where the system needs to send the response to
-  content: ApplicationEventContent;
+  content: SocialMediaEventContent;
   timestamp: number;
   platform: Platform;
   channel: PlatformChannel;
-  metadata: ApplicationEventMetadata;
+  metadata: SocialMediaEventMetadata;
 }
 
-export interface ApplicationEventMetadata {
+export interface SocialMediaEventMetadata {
   externalId: string; // Either messageId or commentId
   source: MessageSource;
   parentId?: string;

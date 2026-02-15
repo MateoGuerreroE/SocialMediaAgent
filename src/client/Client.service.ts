@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConsoleLogger, Injectable } from '@nestjs/common';
 import {
   ClientCredentialRepository,
   ClientEventRepository,
@@ -25,6 +25,7 @@ export class ClientService {
     private readonly clientCredentialsRepository: ClientCredentialRepository,
     private readonly clientEventRepository: ClientEventRepository,
     private readonly clientCacheService: ClientCacheService,
+    private readonly logger: ConsoleLogger,
   ) {}
 
   async createClient(dto: CreateClientDTO) {
@@ -108,16 +109,16 @@ export class ClientService {
 
     useCache?: boolean;
   }): Promise<ClientEntity> {
-    //   this.logger.log(`Retrieving client for account ${accountId}`);
+    this.logger.log(`Retrieving client for account ${accountId}`);
     let client: ClientEntity | null;
     if (useCache) {
       client = await this.clientCacheService.get(accountId, platform);
       if (client) {
-        //   this.logger.log(`Cache HIT for ${platform}:${accountId}`);
+        this.logger.log(`Cache HIT for ${platform}:${accountId}`);
         return client;
       }
     }
-    //   this.logger.log(`Cache MISS for ${platform}:${accountId}`);
+    this.logger.log(`Cache MISS for ${platform}:${accountId}`);
 
     client = await this.clientRepository.locateClientByAccount(platform, accountId);
 

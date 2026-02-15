@@ -1,13 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConsoleLogger, Injectable } from '@nestjs/common';
 import { Platform } from '../generated/prisma/enums';
 import { ClientEntity } from '../types/entities';
 import { RedisService } from '../data';
 
 @Injectable()
 export class ClientCacheService {
-  constructor(private readonly redis: RedisService) {}
+  constructor(
+    private readonly redis: RedisService,
+    private readonly logger: ConsoleLogger,
+  ) {}
   readonly TTL = 604800; // 1 week cache
-  readonly logger = new Logger(ClientCacheService.name);
 
   async get(accountId: string, platform: Platform): Promise<ClientEntity | null> {
     try {
