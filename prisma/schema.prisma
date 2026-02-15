@@ -1,0 +1,267 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PlatformChannel {
+  DIRECT_MESSAGE
+  COMMENT
+}
+
+enum MessageSource {
+  DIRECT
+  AD
+}
+
+enum OriginalContentType {
+  TEXT
+  IMAGE
+  AUDIO
+}
+
+enum AgentActionType {
+  REPLY
+  CONFIRM_DATA
+  CAPTURE_DATA
+  ALERT
+}
+
+enum Platform {
+  FACEBOOK
+  INSTAGRAM
+  WHATSAPP
+}
+
+enum ApplicationActor {
+  USER
+  AGENT
+}
+
+enum AgentKey {
+  COMMUNITY_MANAGER
+  CRM_INTEGRATION
+}
+
+enum AgentSessionStatus {
+  STARTED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum CredentialType {
+  PAGE_ACCESS_TOKEN
+  APP_ACCESS_TOKEN
+  WHATSAPP_S3_BUCKET
+}
+
+model Conversation {
+  conversationId       String          @id @default(uuid())
+  accountId            String
+  clientId             String
+  activeAgentSessionId String?
+  // Attributes
+  platform             Platform
+  channel              PlatformChannel
+  commentSourceId      String? // For comments, this follows format: {postId}_{senderId}
+  senderId             String
+  postId               String? // For comments only
+  parentId             String? // For comment threads only
+  senderUsername       String?
+  // State
+  pausedUntil          DateTime?
+  activeAgentKey       AgentKey?
+  // Timestamps
+  createdAt            DateTime        @default(now())
+  lastMessageAt        DateTime
+
+  // Relations
+  messages ConversationMessage[]
+  session  AgentSession?         @relation(fields: [activeAgentSessionId], references: [sessionId])
+}
+
+model ConversationMessage {
+  messageId           String              @id @default(uuid())
+  conversationId      String
+  content             String
+  originalContentType OriginalContentType
+  originalSourceUrl   String?
+  externalId          String // MessageId or CommentId -> Agent ID would be used here for agent messages
+  sentBy              ApplicationActor
+  source              MessageSource
+  // Flags
+  isDeleted           Boolean             @default(false)
+  deletedAt           DateTime?
+  // Timestamps
+  receivedAt          DateTime            @default(now())
+  agentSessionId      String?
+
+  // Relations
+  conversation Conversation @relation(fields: [conversationId], references: [conversationId])
+}
+
+model Client {
+  clientId            String   @id @default(uuid())
+  businessName        String
+  businessLocation    String
+  industry            String
+  businessDescription String
+  businessHours       String
+  contactOptions      String
+  dynamicInformation  String?
+  whatsappNumber      String?
+  instagramAccountId  String?
+  facebookAccountId   String?
+  isActive            Boolean  @default(true)
+  // Timestamps
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Relations
+  events      ClientEvent[]
+  credentials ClientCredential[]
+}
+
+model ClientCredential {
+  clientCredentialId String         @id @default(uuid())
+  clientId           String
+  type               CredentialType
+  expiresAt          DateTime?
+  value              String
+  // Timestamps
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  // Relations
+  client Client? @relation(fields: [clientId], references: [clientId])
+}
+
+model ClientEvent {
+  eventId     String    @id @default(uuid())
+  clientId    String
+  eventName   String
+  description String
+  recurrence  String
+  startDate   DateTime?
+  endDate     DateTime?
+  // Timestamps
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  client Client? @relation(fields: [clientId], references: [clientId])
+}
+
+model ClientAgent {
+  agentId       String   @id @default(uuid())
+  clientId      String
+  agentKey      AgentKey
+  name          String
+  useCase       String
+  isActive      Boolean  @default(true)
+  configuration Json
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model AgentLog {
+  logId          String   @id @default(uuid())
+  agentId        String
+  messageId      String
+  reason         String
+  decisionScore  Float
+  conversationId String
+  message        String
+  metadata       Json
+  // Timestamps
+  createdAt      DateTime @default(now())
+}
+
+model AgentAction {
+  actionId      String          @id @default(uuid())
+  agentId       String
+  actionType    AgentActionType
+  useCase       String
+  isActive      Boolean         @default(true)
+  configuration Json
+  // Timestamps
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  // Relations
+  variants AgentActionVariant[]
+  policies AgentActionPolicy[]
+}
+
+model AgentActionVariant {
+  variantId             String           @id @default(uuid())
+  actionId              String
+  agentId               String
+  platform              Platform?
+  channel               PlatformChannel?
+  overrideConfiguration Json
+  isActive              Boolean          @default(true)
+  // Timestamps
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  // Relations
+  agentAction AgentAction @relation(fields: [actionId], references: [actionId])
+}
+
+model AgentActionPolicy {
+  policyId  String           @id @default(uuid())
+  actionId  String
+  agentId   String
+  platform  Platform?
+  channel   PlatformChannel?
+  isAllowed Boolean          @default(true)
+  // Timestamps
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  // Relations
+  agentAction AgentAction @relation(fields: [actionId], references: [actionId])
+}
+
+model AgentActionLog {
+  logId          String          @id @default(uuid())
+  conversationId String
+  agentId        String
+  actionId       String
+  // Attributes
+  takenAction    AgentActionType
+  agentKey       AgentKey
+  reason         String
+  actionScore    Float
+  // Timestamps
+  actionTakenAt  DateTime        @default(now())
+}
+
+model AgentSession {
+  sessionId      String             @id @default(uuid())
+  agentId        String
+  agentKey       AgentKey
+  startedAt      DateTime           @default(now())
+  endedAt        DateTime?
+  status         AgentSessionStatus
+  summary        String?
+  conversationId String
+  state          Json
+  result         Json
+
+  // Relations
+  conversations Conversation[]
+}
