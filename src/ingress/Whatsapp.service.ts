@@ -31,6 +31,7 @@ import { Utils } from 'src/utils';
 export class WhatsappService implements OnModuleInit, OnModuleDestroy {
   private sockets = new Map<string, WASocket>();
   private status = new Map<string, 'connecting' | 'open' | 'closed'>();
+  private qrResolvers = new Map<string, (qr: string) => void>();
   private s3Client: S3Client;
   private bucketName: string;
 
@@ -113,9 +114,59 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Call this from your bootstrap or when a tenant is activated.
+   * Initiate connection and return QR code for scanning.
+   * Use this from API endpoints to onboard new clients.
    */
-  async connect(client: ClientEntity, credentialValue: string): Promise<WASocket> {
+  async initiateConnection(clientId: string): Promise<{ qr?: string; status: string }> {
+    if (this.sockets.has(clientId)) {
+      return { status: 'already_connected' };
+    }
+
+    const client = await this.clientService.getClientById(clientId);
+    if (!client) {
+      throw new Error(`Client ${clientId} not found`);
+    }
+
+    const whatsappCredential = client.credentials?.find(
+      (cred) => cred.type === CredentialType.WHATSAPP_S3_BUCKET,
+    );
+
+    if (!whatsappCredential) {
+      throw new Error(`Client ${clientId} has no WhatsApp credentials`);
+    }
+
+    return new Promise((resolve) => {
+      this.qrResolvers.set(clientId, (qr: string) => {
+        resolve({ qr, status: 'qr_generated' });
+      });
+
+      // Start connection - QR will be captured in connection.update handler
+      this.connect(client, whatsappCredential.value).catch((err) => {
+        this.qrResolvers.delete(clientId);
+        throw err;
+      });
+
+      // Timeout after 30 seconds if no QR
+      setTimeout(() => {
+        if (this.qrResolvers.has(clientId)) {
+          this.qrResolvers.delete(clientId);
+          // Clean up the socket if still connecting
+          const sock = this.sockets.get(clientId);
+          if (sock && this.status.get(clientId) !== 'open') {
+            sock.end(new Error('QR timeout'));
+            this.sockets.delete(clientId);
+            this.status.delete(clientId);
+          }
+          resolve({ status: 'timeout' });
+        }
+      }, 30000);
+    });
+  }
+
+  /**
+   * Internal connection method - handles socket creation and events.
+   */
+  private async connect(client: ClientEntity, credentialValue: string): Promise<WASocket> {
     const { clientId, whatsappNumber } = client;
     if (this.sockets.has(clientId)) return this.sockets.get(clientId)!;
 
@@ -138,8 +189,17 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       const { connection, lastDisconnect, qr } = u;
 
       if (qr) {
-        this.logger.warn(`[${clientId}] Scan QR to connect`);
-        qrcode.generate(qr, { small: true });
+        this.logger.warn(`[${clientId}] QR generated`);
+
+        // If there's a pending resolver (from API call), send QR to it
+        const resolver = this.qrResolvers.get(clientId);
+        if (resolver) {
+          resolver(qr);
+          this.qrResolvers.delete(clientId);
+        } else {
+          // Fallback: print to terminal (for onModuleInit flows)
+          qrcode.generate(qr, { small: true });
+        }
       }
 
       if (connection === 'open') {
@@ -152,6 +212,8 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
 
         const code = (lastDisconnect?.error as any)?.output?.statusCode;
         const loggedOut = code === DisconnectReason.loggedOut;
+        const authFailure =
+          code === DisconnectReason.badSession || code === DisconnectReason.connectionReplaced;
 
         this.logger.warn(
           `⚠️ [${clientId}] connection closed (loggedOut=${loggedOut}, code=${code})`,
@@ -159,7 +221,8 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
 
         this.sockets.delete(clientId);
 
-        if (!loggedOut) {
+        // Only auto-reconnect for network issues, not auth failures
+        if (!loggedOut && !authFailure) {
           setTimeout(() => this.connect(client, credentialValue), 1500);
         }
       }

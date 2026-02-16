@@ -28,6 +28,14 @@ export class ClientService {
     private readonly logger: ConsoleLogger,
   ) {}
 
+  async getClientById(clientId: string): Promise<ClientEntity> {
+    const client = await this.clientRepository.getClientById(clientId);
+    if (!client) {
+      throw new NotFoundError(`Client with ID ${clientId} not found.`);
+    }
+    return client;
+  }
+
   async createClient(dto: CreateClientDTO) {
     await this.verifyClientDoesNotExist(dto);
 
