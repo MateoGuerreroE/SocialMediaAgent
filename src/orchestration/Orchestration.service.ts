@@ -10,6 +10,7 @@ import { Queue } from 'bullmq';
 import { MessageWindowService } from '../messaging/MessageWindow.service';
 import { EarlyTerminationError } from '../types/errors/EarlyTerminationError';
 import { Utils } from '../utils';
+import { AgentLogRepository } from 'src/data/repository';
 
 @Injectable()
 export class OrchestrationService {
@@ -19,6 +20,7 @@ export class OrchestrationService {
     private readonly conversationService: ConversationService,
     private readonly generationService: GenerativeService,
     private readonly messageWindowService: MessageWindowService,
+    private readonly agentLogRepository: AgentLogRepository,
     @InjectQueue('agent-community-manager') private readonly agentCommunityManagerQueue: Queue,
     @InjectQueue('agent-crm-integration') private readonly agentCrmIntegrationQueue: Queue,
     @InjectQueue('agent-booking-manager') private readonly agentBookingManagerQueue: Queue,
@@ -42,13 +44,13 @@ export class OrchestrationService {
         platform: event.platform,
       });
 
+      const canClientProcess = this.verifyClient(client, event.platform, event.channel);
+      if (!canClientProcess) return;
+
       const conversation = await this.conversationService.getOrCreateConversation(
         event,
         client.clientId,
       );
-
-      const canClientProcess = this.verifyClient(client, event.platform, event.channel);
-      if (!canClientProcess) return;
 
       const canConversationProcess = this.verifyConversation(conversation);
       if (!canConversationProcess) return;
@@ -59,12 +61,19 @@ export class OrchestrationService {
 
       await this.conversationService.addUserMessage(conversation, event);
 
-      const agentDecision = await this.requireAgentDecision(client.agents!, event.content.text);
+      const { selectedAgent, logId } = await this.requireAgentDecision({
+        agents: client.agents!,
+        conversation,
+        message: event.content.text,
+        messageId: event.messageId,
+      });
+
       await this.routeToQueue({
-        agentKey: agentDecision.agentKey,
+        agentKey: selectedAgent.agentKey,
         conversation,
         client,
         event,
+        logId,
       });
     } catch (e) {
       if (e instanceof EarlyTerminationError) {
@@ -80,17 +89,21 @@ export class OrchestrationService {
     conversation,
     client,
     event,
+    logId,
   }: {
     agentKey: string;
     conversation: ConversationEntity;
     client: ClientEntity;
     event: SocialMediaEvent;
+    logId?: string;
   }) {
     const payload = {
       conversation,
       client,
       event,
+      logId,
     };
+
     switch (agentKey) {
       case 'COMMUNITY_MANAGER':
         await this.agentCommunityManagerQueue.add('handleEvent', payload, {
@@ -110,13 +123,37 @@ export class OrchestrationService {
     }
   }
 
-  async requireAgentDecision(agents: AgentEntity[], message: string): Promise<AgentEntity> {
+  async requireAgentDecision({
+    agents,
+    conversation,
+    message,
+    messageId,
+  }: {
+    agents: AgentEntity[];
+    conversation: ConversationEntity;
+    message: string;
+    messageId: string;
+  }): Promise<{
+    selectedAgent: AgentEntity;
+    logId?: string;
+  }> {
+    if (conversation.session) {
+      const sessionAgent = agents.find(
+        (agent) => agent.agentKey === conversation.session!.agentKey,
+      );
+      if (sessionAgent && sessionAgent.isActive) {
+        this.logger.debug(
+          `Existing session found for conversation ${conversation.conversationId}. Automatically selecting agent ${sessionAgent.agentKey}.`,
+        );
+        return { selectedAgent: sessionAgent };
+      }
+    }
     const activeAgents = agents.filter((agent) => agent.isActive);
     if (activeAgents.length === 1) {
       this.logger.log(
         `Only one agent available (${activeAgents[0].agentKey}). Automatically selecting this agent.`,
       );
-      return activeAgents[0];
+      return { selectedAgent: activeAgents[0] };
     }
 
     const decision = await this.generationService.requestAgentDecision(activeAgents, message);
@@ -126,14 +163,25 @@ export class OrchestrationService {
       this.logger.warn(
         `Model returned an invalid agent key: ${decision.agent}. Defaulting to first agent in the list.`,
       );
-      return activeAgents[0];
+      return { selectedAgent: activeAgents[0] };
     }
+
+    const logId = await this.agentLogRepository.createLog({
+      logId: Utils.generateUUID(),
+      agentId: selectedAgent.agentId,
+      messageId,
+      decisionScore: decision.decisionScore,
+      reason: decision.reason,
+      conversationId: conversation.conversationId,
+      message,
+      metadata: {},
+    });
 
     this.logger.debug(
       `Model decision: Agent ${selectedAgent.agentKey} with score ${decision.decisionScore}. Reason: ${decision.reason}`,
     );
 
-    return selectedAgent;
+    return { selectedAgent, logId };
   }
 
   verifyClient(client: ClientEntity, platform: Platform, channel: PlatformChannel): boolean {
@@ -174,8 +222,9 @@ export class OrchestrationService {
     } else {
       if (platform === Platform.WHATSAPP) {
         requiredCredentials.push(CredentialType.WHATSAPP_S3_BUCKET);
+      } else {
+        requiredCredentials.push(CredentialType.PAGE_ACCESS_TOKEN);
       }
-      requiredCredentials.push(CredentialType.PAGE_ACCESS_TOKEN);
     }
 
     // Check all required credentials in one pass

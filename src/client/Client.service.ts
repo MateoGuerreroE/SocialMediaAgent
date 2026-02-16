@@ -183,4 +183,8 @@ export class ClientService {
       ...updates,
     });
   }
+
+  async getClientsWithActiveWhatsappIntegrations(): Promise<ClientEntity[]> {
+    return this.clientRepository.getClientsWithWhatsappNumber();
+  }
 }

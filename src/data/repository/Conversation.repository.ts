@@ -30,7 +30,7 @@ export class ConversationRepository {
 
   async updateConversationStatus(
     conversationId: string,
-    updates: { activeAgentKey?: AgentKey; activeAgentSessionId?: string; lastMessageAt?: Date },
+    updates: { activeAgentSessionId?: string; lastMessageAt?: Date },
   ) {
     await this.prisma.conversation.update({
       where: { conversationId },

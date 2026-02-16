@@ -4,3 +4,4 @@ export * from './ClientCredential.repository';
 export * from './Conversation.repository';
 export * from './ConversationMessage.repository';
 export * from './Agent.repository';
+export * from './AgentLog.repository';

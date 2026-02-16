@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../Prisma.service';
 import { ClientEntity } from '../../types/entities';
-import { Platform } from '../../generated/prisma/enums';
+import { CredentialType, Platform } from '../../generated/prisma/enums';
 import { CreateClient, UpdateClientPayload } from '../../types/transactions';
 
 @Injectable()
@@ -54,6 +54,23 @@ export class ClientRepository {
       include: {
         events: includeRelations,
         credentials: includeRelations,
+      },
+    });
+  }
+
+  async getClientsWithWhatsappNumber(): Promise<ClientEntity[]> {
+    return this.prisma.client.findMany({
+      where: {
+        whatsappNumber: {
+          not: null,
+        },
+      },
+      include: {
+        credentials: {
+          where: {
+            type: CredentialType.WHATSAPP_S3_BUCKET,
+          },
+        },
       },
     });
   }

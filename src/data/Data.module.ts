@@ -8,6 +8,7 @@ import {
   ConversationMessageRepository,
   ConversationRepository,
 } from './repository';
+import { AgentLogRepository } from './repository/AgentLog.repository';
 
 @Module({
   providers: [
@@ -16,6 +17,7 @@ import {
     RedisService,
     ClientCredentialRepository,
     ConversationRepository,
+    AgentLogRepository,
     ConversationMessageRepository,
     ClientEventRepository,
   ],
@@ -24,6 +26,7 @@ import {
     RedisService,
     ClientCredentialRepository,
     ConversationRepository,
+    AgentLogRepository,
     ConversationMessageRepository,
     ClientEventRepository,
   ],

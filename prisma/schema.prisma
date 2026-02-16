@@ -76,7 +76,6 @@ model Conversation {
   conversationId       String          @id @default(uuid())
   accountId            String
   clientId             String
-  activeAgentSessionId String?
   // Attributes
   platform             Platform
   channel              PlatformChannel
@@ -87,7 +86,7 @@ model Conversation {
   senderUsername       String?
   // State
   pausedUntil          DateTime?
-  activeAgentKey       AgentKey?
+  activeAgentSessionId String?
   // Timestamps
   createdAt            DateTime        @default(now())
   lastMessageAt        DateTime
