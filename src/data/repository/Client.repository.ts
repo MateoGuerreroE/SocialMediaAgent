@@ -17,6 +17,7 @@ export class ClientRepository {
       include: {
         events: true,
         credentials: true,
+        agents: true,
       },
     });
   }

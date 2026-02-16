@@ -1,4 +1,6 @@
 import { ConsoleLogger, Injectable } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import {
   FacebookDMEvent,
   FacebookEvent,
@@ -7,11 +9,19 @@ import {
   MetaDMData,
 } from './types';
 import { SocialMediaEvent, SocialMediaEventContent } from '../types/messages';
-import { MessageSource, Platform, PlatformChannel } from '../generated/prisma/enums';
+import {
+  MessageSource,
+  OriginalContentType,
+  Platform,
+  PlatformChannel,
+} from '../generated/prisma/enums';
 
 @Injectable()
 export class WebhookRoutingService {
-  constructor(private readonly logger: ConsoleLogger) {}
+  constructor(
+    private readonly logger: ConsoleLogger,
+    @InjectQueue('orchestration') private readonly orchestrationQueue: Queue,
+  ) {}
 
   async routeInstagramEvent(event: InstagramEvent): Promise<void> {
     this.logger.log(`Received Instagram event for account ${event.id}`);
@@ -22,7 +32,7 @@ export class WebhookRoutingService {
         return;
       }
 
-      await Promise.resolve();
+      await this.sendToOrchestrationQueue(parsedEvent);
     } catch (e) {
       this.logger.error(
         `Error parsing Instagram event: ${e instanceof Error ? e.message : String(e)}`,
@@ -41,7 +51,7 @@ export class WebhookRoutingService {
         return;
       }
 
-      await Promise.resolve();
+      await this.sendToOrchestrationQueue(parsedEvent);
     } catch (e) {
       this.logger.error(
         `Error parsing Facebook event: ${e instanceof Error ? e.message : String(e)}`,
@@ -50,6 +60,13 @@ export class WebhookRoutingService {
       return;
     }
   }
+
+  private readonly sendToOrchestrationQueue = async (event: SocialMediaEvent) => {
+    await this.orchestrationQueue.add('message_received', event, {
+      jobId: event.messageId,
+      attempts: 1,
+    });
+  };
 
   private parseInstagramEvent(payload: InstagramEvent): SocialMediaEvent | null {
     const messageId = crypto.randomUUID();
@@ -87,7 +104,7 @@ export class WebhookRoutingService {
           },
           externalId: igContents.value.id,
         },
-        content: { text: igContents.value.text, originalType: 'text' },
+        content: { text: igContents.value.text, originalType: OriginalContentType.TEXT },
       };
 
       return commentPayload;
@@ -146,7 +163,7 @@ export class WebhookRoutingService {
             fbContents.value.verb === 'remove'
               ? fbContents.value.comment_id
               : fbContents.value.message,
-          originalType: 'text',
+          originalType: OriginalContentType.TEXT,
         },
       };
 
@@ -182,7 +199,7 @@ export class WebhookRoutingService {
     const isStoryMention = this.isStoryMentionMessage(messageData.message);
 
     const content = isStoryMention
-      ? { text: messageData.message.text ?? '', originalType: 'text' as const }
+      ? { text: messageData.message.text ?? '', originalType: OriginalContentType.TEXT }
       : this.getContent(messageData.message);
 
     if (!content) {
@@ -218,7 +235,7 @@ export class WebhookRoutingService {
 
   private getContent(message: MetaDMData): SocialMediaEventContent | null {
     if (message.text && message.text.length > 0) {
-      return { text: message.text, originalType: 'text' };
+      return { text: message.text, originalType: OriginalContentType.TEXT };
     } else if (message.attachments && message.attachments.length > 0) {
       const attachment = message.attachments[0];
 
@@ -230,7 +247,7 @@ export class WebhookRoutingService {
         return null;
       }
     }
-    if (message.is_deleted) return { text: message.mid, originalType: 'text' };
+    if (message.is_deleted) return { text: message.mid, originalType: OriginalContentType.TEXT };
 
     this.logger.warn('Unsupported message content type');
     return null;

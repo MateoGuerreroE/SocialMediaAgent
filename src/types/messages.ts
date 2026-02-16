@@ -1,10 +1,15 @@
-import { MessageSource, Platform, PlatformChannel } from '../generated/prisma/enums';
+import {
+  MessageSource,
+  OriginalContentType,
+  Platform,
+  PlatformChannel,
+} from '../generated/prisma/enums';
 
 export type EventType = 'created' | 'updated' | 'deleted';
 
 export type SocialMediaEventContent = {
   text: string;
-  originalType: 'text' | 'audio' | 'image';
+  originalType: OriginalContentType;
   originalContentUrl?: string; // URL to the original content if it's not texts
 };
 
