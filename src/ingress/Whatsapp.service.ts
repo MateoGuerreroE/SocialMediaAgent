@@ -167,7 +167,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
    * Internal connection method - handles socket creation and events.
    */
   private async connect(client: ClientEntity, credentialValue: string): Promise<WASocket> {
-    const { clientId, whatsappNumber } = client;
+    const { clientId } = client;
     if (this.sockets.has(clientId)) return this.sockets.get(clientId)!;
 
     this.status.set(clientId, 'connecting');
@@ -248,7 +248,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     return this.status.get(clientId) ?? 'closed';
   }
 
-  async disconnect(clientId: string) {
+  disconnect(clientId: string) {
     const sock = this.sockets.get(clientId);
     if (!sock) return;
     try {
@@ -259,9 +259,9 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async onModuleDestroy() {
+  onModuleDestroy() {
     for (const [clientId] of this.sockets.entries()) {
-      await this.disconnect(clientId);
+      this.disconnect(clientId);
     }
   }
 
@@ -327,23 +327,24 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       );
       const buffer = await this.streamToBuffer(val.Body);
       return buffer.toString();
-    } catch (error) {
+    } catch (e) {
+      this.logger.error(`Failed to get from S3: ${keyName}: ${(e as Error).message}`);
       return null;
     }
   }
 
   private async saveToS3(keyName: string, data: string): Promise<void> {
-    await this.s3Client
-      .send(
+    try {
+      await this.s3Client.send(
         new PutObjectCommand({
           Bucket: this.bucketName,
           Key: keyName,
           Body: data,
         }),
-      )
-      .catch((e) => {
-        this.logger.error(`Failed to save to S3: ${keyName}: ${(e as Error).message}`);
-      });
+      );
+    } catch (e) {
+      this.logger.error(`Failed to save to S3: ${keyName}: ${(e as Error).message}`);
+    }
   }
 
   private mapToSocialMediaEvent({
@@ -388,7 +389,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       targetId,
       messageId,
       metadata: {
-        externalId: isDeleted ? msg.message?.protocolMessage?.key?.id! : msg.key?.id!,
+        externalId: isDeleted ? (msg.message?.protocolMessage?.key?.id ?? '') : (msg.key?.id ?? ''),
         source: MessageSource.DIRECT,
         sender: {
           id: phoneOrId,

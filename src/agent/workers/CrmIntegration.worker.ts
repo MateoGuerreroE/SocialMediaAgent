@@ -15,7 +15,7 @@ export class CrmIntegrationWorker extends WorkerHost {
   }
 
   async process(job: Job<any>): Promise<void> {
-    this.logger.log(`Handling CRM integration event: ${JSON.stringify(job.data)}`);
+    this.logger.log(`Handling CRM integration event: ${JSON.stringify(job.data, null, 2)}`);
     return Promise.resolve();
   }
 

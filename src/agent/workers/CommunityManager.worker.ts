@@ -15,7 +15,7 @@ export class CommunityManagerWorker extends WorkerHost {
   }
 
   async process(job: Job<any>): Promise<void> {
-    this.logger.log(`Handling community manager event: ${JSON.stringify(job.data)}`);
+    this.logger.log(`Handling community manager event: ${JSON.stringify(job.data, null, 2)}`);
     return Promise.resolve();
   }
 
