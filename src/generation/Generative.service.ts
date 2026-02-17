@@ -2,7 +2,7 @@ import { ConsoleLogger, Injectable } from '@nestjs/common';
 import { AgentEntity, ClientEntity, ConversationMessageEntity } from '../types/entities';
 import { ExpectedModelResponseFormat, GenerationModel } from './models/model';
 import { PromptService } from './Prompt.service';
-import { AgentDecisionResponse } from './types';
+import { AgentDecisionResponse, ReplyRules } from './types';
 
 @Injectable()
 export class GenerativeService {
@@ -14,8 +14,21 @@ export class GenerativeService {
 
   async generateResponseWithClientContext(
     client: ClientEntity,
+    replyRules: ReplyRules,
     conversationHistory: ConversationMessageEntity[],
-  ) {}
+  ) {
+    const systemPrompt = this.promptService.getSystemPromptForClientResponse(client, replyRules);
+    const history = this.promptService.formatConversationHistory(conversationHistory);
+
+    const prompt = `Given the following conversation, provide the client an appropiate response:${history}${client.events?.length ? '\n\n' + this.promptService.getClientEventsPrompt(client.events) : ''}`;
+
+    const generatedResponse = await this.model.sendToModel({
+      prompt,
+      systemPrompt,
+    });
+
+    return generatedResponse;
+  }
 
   async requestAgentDecision(
     agents: AgentEntity[],

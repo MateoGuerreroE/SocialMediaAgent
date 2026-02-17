@@ -47,6 +47,9 @@ importers:
       class-validator:
         specifier: ^0.14.3
         version: 0.14.3
+      dayjs:
+        specifier: ^1.11.19
+        version: 1.11.19
       ioredis:
         specifier: ^5.9.3
         version: 5.9.3
@@ -2285,6 +2288,9 @@ packages:
 
   curve25519-js@0.0.4:
     resolution: {integrity: sha512-axn2UMEnkhyDUPWOwVKBMVIzSQy2ejH2xRGy1wq81dqRwApXfIzfbE3hIX0ZRFBIihf/KDqK158DLwESu4AK1w==}
+
+  dayjs@1.11.19:
+    resolution: {integrity: sha512-t5EcLVS6QPBNqM2z8fakk/NKel+Xzshgt8FFKAn+qwlD1pzZWxh0nVCrvFK7ZDb6XucZeF9z8C7CBWTRIVApAw==}
 
   debug@4.4.3:
     resolution: {integrity: sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==}
@@ -7050,6 +7056,8 @@ snapshots:
   csstype@3.2.3: {}
 
   curve25519-js@0.0.4: {}
+
+  dayjs@1.11.19: {}
 
   debug@4.4.3:
     dependencies:
