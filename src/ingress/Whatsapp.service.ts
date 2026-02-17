@@ -180,6 +180,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       auth: state as AuthenticationState,
       syncFullHistory: false,
       generateHighQualityLinkPreview: false,
+      shouldSyncHistoryMessage: () => false,
       printQRInTerminal: false,
     });
 

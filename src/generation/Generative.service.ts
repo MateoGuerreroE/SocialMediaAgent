@@ -1,5 +1,5 @@
 import { ConsoleLogger, Injectable } from '@nestjs/common';
-import { AgentEntity } from '../types/entities';
+import { AgentEntity, ClientEntity, ConversationMessageEntity } from '../types/entities';
 import { ExpectedModelResponseFormat, GenerationModel } from './models/model';
 import { PromptService } from './Prompt.service';
 import { AgentDecisionResponse } from './types';
@@ -10,6 +10,11 @@ export class GenerativeService {
     private readonly logger: ConsoleLogger,
     private readonly promptService: PromptService,
     private readonly model: GenerationModel,
+  ) {}
+
+  async generateResponseWithClientContext(
+    client: ClientEntity,
+    conversationHistory: ConversationMessageEntity[],
   ) {}
 
   async requestAgentDecision(
