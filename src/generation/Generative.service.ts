@@ -111,4 +111,20 @@ export class GenerativeService {
 
     return parsed as T;
   }
+
+  async generateAlertMessage(
+    conversationMessages: ConversationMessageEntity[],
+    reason: string,
+  ): Promise<string> {
+    const history = this.promptService.formatConversationHistory(conversationMessages);
+    const systemPrompt = this.promptService.getAlertGenerationSystemPrompt();
+
+    const prompt = `Given the following conversation history: ${history}\n\nAnd the reason for alerting: "${reason}"\n\nProvide a short (max 100 characters) message to sent to client to alert them about the situation.`;
+    const generatedMessage = await this.model.sendToModel({
+      prompt,
+      systemPrompt,
+    });
+
+    return generatedMessage;
+  }
 }

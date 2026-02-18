@@ -10,9 +10,7 @@ export class ReplyAction {
     private readonly logger: ConsoleLogger,
     private readonly whatsappService: WhatsappService,
   ) {}
-  // This should be a simple action that takes the message and sends it to the appropriate channel & platform
-  // Should receive the already generated message from the LLM, and just handle the sending part
-  // This to keep It agnostic, therefore reusable across all agents, and not just the social media one
+
   async execute({
     message,
     platform,
@@ -25,7 +23,74 @@ export class ReplyAction {
     target: string;
     channel: PlatformChannel;
     credential: ClientCredentialEntity;
-  }) {}
+  }) {
+    let result: string | null = null;
+    switch (platform) {
+      case Platform.WHATSAPP:
+        if (channel !== PlatformChannel.DIRECT_MESSAGE) {
+          throw new ConflictError('WhatsApp only supports DM channel');
+        }
+        result = await this.replyWhatsappMessage({
+          clientId: credential.clientId,
+          message,
+          target,
+        });
+        break;
+      case Platform.INSTAGRAM:
+      case Platform.FACEBOOK:
+        if (channel === PlatformChannel.COMMENT) {
+          result = await this.replyMetaComment({
+            credential,
+            message,
+            platform,
+            target,
+          });
+        } else if (channel === PlatformChannel.DIRECT_MESSAGE) {
+          result = await this.replyMetaDM({
+            credential,
+            message,
+            platform,
+            target,
+          });
+        } else {
+          throw new ConflictError('Invalid channel for Meta platforms');
+        }
+    }
+    if (!result) {
+      this.logger.error(`Failed to send message on platform ${platform} for target ${target}`);
+    } else {
+      this.logger.log(`Message sent successfully on platform ${platform} for target ${target}`);
+    }
+  }
+
+  async replyWhatsappMessage({
+    clientId,
+    message,
+    target,
+  }: {
+    clientId: string;
+    message: string;
+    target: string;
+  }): Promise<string | null> {
+    const socket = this.whatsappService.getSocket(clientId);
+    if (!socket) {
+      this.logger.error(`No WhatsApp socket found for client ${clientId}`);
+      return null;
+    }
+    // TODO Verify If this returns any useful information that we can log, like messageId or conversationId for better traceability
+    try {
+      const sentMessage = await socket.sendMessage(target, {
+        text: message,
+      });
+      this.logger.log(`Successfully sent WhatsApp message to ${target} for client ${clientId}`);
+      return sentMessage?.key?.id ?? null;
+    } catch (e) {
+      this.logger.error(
+        `Failed to send WhatsApp message to ${target} for client ${clientId}: ${e.message}`,
+      );
+      return null;
+    }
+  }
 
   async replyMetaDM({
     credential,
@@ -37,7 +102,7 @@ export class ReplyAction {
     platform: Platform;
     target: string;
     credential: ClientCredentialEntity;
-  }): Promise<void> {
+  }): Promise<string | null> {
     if (platform === Platform.INSTAGRAM && credential.type !== CredentialType.APP_ACCESS_TOKEN) {
       throw new ConflictError('Invalid credential type for replying to meta DM on Instagram');
     } else if (
@@ -61,12 +126,12 @@ export class ReplyAction {
     if (result.ok) {
       // TODO - we should also log the messageId and conversationId here for better traceability, but we need to modify the response of the API call to get that information first
       this.logger.log(`Successfully replied to meta DM on ${platform} for target ${target}`);
-      return;
+      return 'TODO';
     }
     this.logger.error(
       `Failed to reply to meta DM on ${platform} for target ${target}: ${JSON.stringify(result.error)}`,
     );
-    return;
+    return null;
   }
 
   async replyMetaComment({

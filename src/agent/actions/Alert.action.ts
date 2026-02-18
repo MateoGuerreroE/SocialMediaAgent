@@ -1,10 +1,69 @@
-import { Injectable } from '@nestjs/common';
+import { ConsoleLogger, Injectable } from '@nestjs/common';
+import { AlertChannel } from '../../types/enums';
 
 @Injectable()
 export class AlertAction {
-  // This should be an alert action that sends an alert to the configured channel (email, slack, sms, etc.) with the provided message and severity level
-  // This can be continued to have also a reply, but this is in charge of client-level alerts (internally)
-  // Examples on this can be to receive an alert when someone provided a certain word but continue normal conversation,
-  // Or to receive an alert for an action that was done before completion (e.g. Alert when CRM integration is done or booking was completed)
-  async execute() {}
+  constructor(private readonly logger: ConsoleLogger) {}
+
+  async execute({
+    generatedMessage,
+    alertTarget,
+    alertChannel,
+  }: {
+    generatedMessage: string;
+    alertTarget: string;
+    alertChannel: AlertChannel;
+  }) {
+    const body = this.resolveBodyForChannel(generatedMessage, alertChannel);
+    this.logger.log(
+      `Alerting ${alertTarget} through ${alertChannel} with message: ${JSON.stringify(body)}`,
+    );
+
+    // Alerts are hits to HTTP endpoints always as this is NOT an alerting aware system
+    try {
+      const result = await fetch(alertTarget, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!result.ok) {
+        const error = await result.text();
+        this.logger.error(
+          `Failed to send alert to ${alertTarget} through ${alertChannel}: ${error}`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error sending alert to ${alertTarget} through ${alertChannel}: ${
+          error instanceof Error ? error.message : JSON.stringify(error)
+        }`,
+      );
+    }
+  }
+
+  private resolveBodyForChannel(
+    generatedMessage: string,
+    alertChannel: AlertChannel,
+  ): Record<string, unknown> {
+    switch (alertChannel) {
+      case AlertChannel.EMAIL:
+        return {
+          subject: 'Alert from Social Media Agent',
+          body: generatedMessage,
+        };
+      case AlertChannel.SLACK:
+        return {
+          text: generatedMessage,
+        };
+      case AlertChannel.WHATSAPP:
+        return {
+          message: generatedMessage,
+        };
+      default:
+        throw new Error(`Unsupported alert channel`);
+    }
+  }
 }

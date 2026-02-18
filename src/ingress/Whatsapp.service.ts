@@ -113,6 +113,10 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  getSocket(clientId: string): WASocket | null {
+    return this.sockets.get(clientId) ?? null;
+  }
+
   /**
    * Initiate connection and return QR code for scanning.
    * Use this from API endpoints to onboard new clients.

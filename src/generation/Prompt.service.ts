@@ -125,4 +125,8 @@ ${formattedEvents}
     
     Take these events into account when crafting your response. If a customer asks about events, promotions, or availability, reference these dates and details.`;
   }
+
+  getAlertGenerationSystemPrompt(): string {
+    return `You are a alert system agent that takes a reason and a conversation history and crafts an alert message that will be sent to a human through different channels. The message should be concise, clear, and provide enough context for the human to understand the situation without overwhelming them with information.`;
+  }
 }
