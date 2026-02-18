@@ -1,20 +1,23 @@
 import { ConsoleLogger, Injectable } from '@nestjs/common';
 import { AlertChannel } from '../../types/enums';
+import { ClientEntity } from 'src/types/entities';
 
 @Injectable()
 export class AlertAction {
   constructor(private readonly logger: ConsoleLogger) {}
 
   async execute({
+    clientContext,
     generatedMessage,
     alertTarget,
     alertChannel,
   }: {
+    clientContext: string;
     generatedMessage: string;
     alertTarget: string;
     alertChannel: AlertChannel;
   }) {
-    const body = this.resolveBodyForChannel(generatedMessage, alertChannel);
+    const body = this.resolveBodyForChannel(generatedMessage, alertChannel, clientContext);
     this.logger.log(
       `Alerting ${alertTarget} through ${alertChannel} with message: ${JSON.stringify(body)}`,
     );
@@ -47,6 +50,7 @@ export class AlertAction {
   private resolveBodyForChannel(
     generatedMessage: string,
     alertChannel: AlertChannel,
+    clientContext: string,
   ): Record<string, unknown> {
     switch (alertChannel) {
       case AlertChannel.EMAIL:
@@ -56,7 +60,7 @@ export class AlertAction {
         };
       case AlertChannel.SLACK:
         return {
-          text: generatedMessage,
+          text: `*Alert from Social Media Agent:*\n\n${clientContext}\nReason: ${generatedMessage}`,
         };
       case AlertChannel.WHATSAPP:
         return {

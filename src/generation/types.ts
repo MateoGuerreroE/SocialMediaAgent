@@ -1,4 +1,4 @@
-import { AgentKey } from '../generated/prisma/enums';
+import { AgentActionType, AgentKey } from '../generated/prisma/enums';
 
 export type AgentDecisionResponse = {
   agent: AgentKey;
@@ -17,4 +17,10 @@ export type ReplyRules = {
   onEmptyMessage?: string;
   intention: string;
   profanity?: string;
+};
+
+export type ActionDecisionResponse = {
+  actionType: AgentActionType;
+  decisionScore: number;
+  reason: string;
 };

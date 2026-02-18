@@ -9,6 +9,6 @@ import { WhatsappService } from './Whatsapp.service';
   imports: [QueueModule, ClientModule],
   controllers: [WebhooksController],
   providers: [WebhookRoutingService, WhatsappService],
-  exports: [],
+  exports: [WhatsappService],
 })
 export class IngressModule {}

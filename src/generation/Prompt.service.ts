@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
+  AgentActionEntity,
   AgentEntity,
   ClientEntity,
   ClientEventEntity,
@@ -7,11 +8,14 @@ import {
 } from '../types/entities';
 import { Utils } from 'src/utils';
 import { ReplyRules } from './types';
+import { AgentActionType } from 'src/generated/prisma/enums';
+import { RequiredField } from 'src/agent/types';
 
 const GENERATION_CONSTANTS = {
   TIMEZONE: 'America/New_York',
   AGENT_DECISION: `You are an orchestration agent that is proficient in deciding which agent should handle a given conversation. You have access to the following agents, each with their own use case and examples:`,
   AGENT_CLIENT_RESPONSE: `You are a Community Manager agent for social media channels, and you respond to clients following rules and context defined per client. You may receive conversation history, make sure to use It to contextualize your responses and make them feel natural and human.`,
+  ACTION_DECISION: `You are an orchestration agent responsible for deciding which action to take based on a conversation history and a list of available actions, each with Its use case, and some additional context. Make sure to use the conversation history provided and the context to make an informed decision`,
 };
 
 @Injectable()
@@ -38,6 +42,26 @@ export class PromptService {
     const systemPrompt = `${GENERATION_CONSTANTS.AGENT_CLIENT_RESPONSE}\n\nClient context:\n${clientContext}\n\nReply rules:\n${replyRulesContext}`;
 
     return systemPrompt;
+  }
+
+  getSystemPromptForActionDecision(actions: AgentActionEntity[]): string {
+    const actionContexts = actions.map((action) => {
+      switch (action.actionType) {
+        case AgentActionType.REPLY:
+          return this.replyActionContext(action);
+        case AgentActionType.ALERT:
+        case AgentActionType.ESCALATE:
+          return this.triggeredActionContext(action);
+        default:
+          return `
+            {
+              "action": "${action.actionType}",
+              "useCase": "${action.useCase}"
+            }
+          `;
+      }
+    });
+    return `${GENERATION_CONSTANTS.ACTION_DECISION}\n\nAvailable actions:\n${actionContexts.join('\n')}`;
   }
 
   /**
@@ -128,5 +152,55 @@ ${formattedEvents}
 
   getAlertGenerationSystemPrompt(): string {
     return `You are a alert system agent that takes a reason and a conversation history and crafts an alert message that will be sent to a human through different channels. The message should be concise, clear, and provide enough context for the human to understand the situation without overwhelming them with information.`;
+  }
+
+  private replyActionContext(action: AgentActionEntity): string {
+    const config = action.configuration;
+    const examples = config.examples
+      ? config.examples.map((ex) => ({
+          isCorrect: ex.isCorrect,
+          message: ex.message,
+          reasoning: ex.reasoning,
+        }))
+      : [];
+
+    return `
+      {
+        "action": "${action.actionType}",
+        "useCase": "${action.useCase}",
+        ${examples.length ? ` "examples": ${JSON.stringify(examples, null, 2)},` : ''}
+      }
+    `;
+  }
+
+  private triggeredActionContext(action: AgentActionEntity): string {
+    const config = action.configuration;
+    return `
+      {
+        "action": "${action.actionType}",
+        "useCase": "${action.useCase}",
+        "triggerCases": [${config.triggerCases
+          .map(
+            (c) => `{
+            "case": "${c.case}",
+            "reasoning": "${c.reasoning}"
+          }`,
+          )
+          .join(',\n')}
+        ],
+      }
+    `;
+  }
+
+  getRequiredFieldsFormat(requiredFields: RequiredField[]): string {
+    return requiredFields
+      .map(
+        (field) => `{
+        "key": "${field.key}",
+        "type": "${field.type}",
+        "options": ${field.options ? JSON.stringify(field.options) : 'null'},
+      }`,
+      )
+      .join(',\n');
   }
 }

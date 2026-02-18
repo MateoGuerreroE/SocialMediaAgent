@@ -19,6 +19,14 @@ export class ConversationMessageRepository {
     });
   }
 
+  async checkIfMessageExists(externalId: string): Promise<boolean> {
+    const count = await this.prisma.conversationMessage.count({
+      where: { externalId },
+    });
+
+    return count > 0;
+  }
+
   async deleteMessage(messageId: string): Promise<void> {
     await this.prisma.conversationMessage.update({
       where: { messageId },

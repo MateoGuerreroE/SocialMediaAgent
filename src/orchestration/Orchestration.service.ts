@@ -11,6 +11,7 @@ import { MessageWindowService } from '../messaging/MessageWindow.service';
 import { EarlyTerminationError } from '../types/errors/EarlyTerminationError';
 import { Utils } from '../utils';
 import { AgentLogRepository } from 'src/data/repository';
+import { WorkerJobData } from 'src/agent/types';
 
 @Injectable()
 export class OrchestrationService {
@@ -27,7 +28,6 @@ export class OrchestrationService {
   ) {}
 
   async orchestrateEvent(event: SocialMediaEvent): Promise<void> {
-    this.logger.debug(`Orchestrating event: ${JSON.stringify(event, null, 2)}`);
     try {
       if (event.eventType === 'deleted') {
         await this.conversationService.deleteMessage(event.metadata.externalId);
@@ -36,6 +36,16 @@ export class OrchestrationService {
 
       if (event.eventType === 'updated') {
         this.logger.warn(`UPDATE case received. This is not implemented yet`);
+        return;
+      }
+
+      const messageExists = await this.conversationService.checkIfMessageExists(
+        event.metadata.externalId,
+      );
+      if (messageExists) {
+        this.logger.warn(
+          `Message with externalId ${event.metadata.externalId} already exists. Skipping processing.`,
+        );
         return;
       }
 
@@ -52,7 +62,7 @@ export class OrchestrationService {
         client.clientId,
       );
 
-      const canConversationProcess = this.verifyConversation(conversation);
+      const canConversationProcess = await this.verifyConversation(conversation);
       if (!canConversationProcess) return;
 
       if (event.channel === PlatformChannel.DIRECT_MESSAGE) {
@@ -69,11 +79,10 @@ export class OrchestrationService {
       });
 
       await this.routeToQueue({
-        agentKey: selectedAgent.agentKey,
+        agent: selectedAgent,
         conversation,
         client,
         event,
-        logId,
       });
     } catch (e) {
       if (e instanceof EarlyTerminationError) {
@@ -85,26 +94,24 @@ export class OrchestrationService {
   }
 
   private async routeToQueue({
-    agentKey,
+    agent,
     conversation,
     client,
     event,
-    logId,
   }: {
-    agentKey: string;
+    agent: AgentEntity;
     conversation: ConversationEntity;
     client: ClientEntity;
     event: SocialMediaEvent;
-    logId?: string;
   }) {
-    const payload = {
+    const payload: WorkerJobData = {
       conversation,
       client,
       event,
-      logId,
+      agent,
     };
 
-    switch (agentKey) {
+    switch (agent.agentKey) {
       case 'COMMUNITY_MANAGER':
         await this.agentCommunityManagerQueue.add('handleEvent', payload, {
           jobId: event.messageId,
@@ -255,12 +262,19 @@ export class OrchestrationService {
     return true;
   }
 
-  verifyConversation(conversation: ConversationEntity): boolean {
-    if (conversation.pausedUntil && conversation.pausedUntil > new Date()) {
-      this.logger.warn(
-        `Conversation ${conversation.conversationId} is paused until ${conversation.pausedUntil.toDateString()}. Skipping event processing.`,
-      );
-      return false;
+  async verifyConversation(conversation: ConversationEntity): Promise<boolean> {
+    if (conversation.pausedUntil) {
+      if (conversation.pausedUntil > new Date()) {
+        this.logger.warn(
+          `Conversation ${conversation.conversationId} is paused until ${conversation.pausedUntil.toDateString()}. Skipping event processing.`,
+        );
+        return false;
+      } else {
+        this.logger.log(
+          `Conversation ${conversation.conversationId} pause has expired. Resuming processing.`,
+        );
+        await this.conversationService.resumeConversation(conversation.conversationId);
+      }
     }
 
     return true;

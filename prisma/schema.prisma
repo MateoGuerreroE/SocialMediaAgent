@@ -33,7 +33,6 @@ enum OriginalContentType {
 enum AgentActionType {
   REPLY
   ALERT
-  CONFIRM_DATA
   CAPTURE_DATA
   COMPLETE
   TRANSFER

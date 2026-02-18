@@ -21,7 +21,7 @@ export class ConversationRepository {
     });
   }
 
-  async updateConversationPause(conversationId: string, pausedUntil: Date) {
+  async updateConversationPause(conversationId: string, pausedUntil: Date | null) {
     await this.prisma.conversation.update({
       where: { conversationId },
       data: { pausedUntil },

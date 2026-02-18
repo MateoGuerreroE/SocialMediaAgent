@@ -1,6 +1,7 @@
 import { ConsoleLogger, Injectable } from '@nestjs/common';
 import { CredentialType, Platform, PlatformChannel } from 'src/generated/prisma/enums';
 import { WhatsappService } from 'src/ingress/Whatsapp.service';
+import { ConversationService } from 'src/messaging';
 import { ClientCredentialEntity } from 'src/types/entities';
 import { ConflictError } from 'src/types/errors';
 

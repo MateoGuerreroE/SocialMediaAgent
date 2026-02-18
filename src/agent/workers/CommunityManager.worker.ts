@@ -1,6 +1,8 @@
 import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { ConsoleLogger } from '@nestjs/common';
 import { Job } from 'bullmq';
+import { CommunityManagerHandler } from '../handlers/CommunityManager.handler';
+import { WorkerJobData } from '../types';
 
 @Processor('agent-community-manager', {
   concurrency: 5,
@@ -10,13 +12,26 @@ import { Job } from 'bullmq';
   },
 })
 export class CommunityManagerWorker extends WorkerHost {
-  constructor(private readonly logger: ConsoleLogger) {
+  constructor(
+    private readonly logger: ConsoleLogger,
+    private readonly handler: CommunityManagerHandler,
+  ) {
     super();
   }
 
-  async process(job: Job<any>): Promise<void> {
-    this.logger.log(`Handling community manager event: ${JSON.stringify(job.data, null, 2)}`);
-    return Promise.resolve();
+  async process(job: Job<WorkerJobData>): Promise<void> {
+    this.logger.log(
+      `Processing Community Manager Job ${job.id} for agent ${job.data.agent.agentId}`,
+    );
+    const { client, conversation, agent } = job.data;
+    const targetId = job.data.event.targetId;
+
+    await this.handler.handle({
+      client,
+      conversation,
+      agent,
+      targetId,
+    });
   }
 
   @OnWorkerEvent('completed')

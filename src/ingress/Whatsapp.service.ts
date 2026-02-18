@@ -11,6 +11,7 @@ import makeWASocket, {
   BufferJSON,
   SignalKeyStore,
 } from '@whiskeysockets/baileys';
+import P from 'pino';
 import qrcode from 'qrcode-terminal';
 import { Queue } from 'bullmq';
 import { ClientService } from 'src/client';
@@ -34,6 +35,11 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
   private qrResolvers = new Map<string, (qr: string) => void>();
   private s3Client: S3Client;
   private bucketName: string;
+  private startupTimestamp: number;
+  private startupGracePeriodMs: number;
+  // In-memory cache for encryption keys to avoid constant S3 hits
+  // null value = key was checked and doesn't exist (negative caching)
+  private keyCache = new Map<string, Map<string, any>>();
 
   constructor(
     configService: ConfigService,
@@ -41,10 +47,22 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     private readonly clientService: ClientService,
     @InjectQueue('orchestration') private readonly orchestrationQueue: Queue,
   ) {
+    // Suppress noisy libsignal-node console.info logs
+    this.suppressLibsignalLogs();
+
     const region = configService.get<string>('AWS_REGION');
     const accessKeyId = configService.get<string>('AWS_ACCESS_KEY_ID');
     const secretAccessKey = configService.get<string>('AWS_SECRET_ACCESS_KEY');
     this.bucketName = configService.get<string>('AWS_S3_BUCKET_NAME', 'test');
+
+    // Startup grace period: skip messages for N minutes after startup to avoid processing history
+    // Set to 0 to disable (useful for development)
+    const gracePeriodMinutes = configService.get<number>(
+      'WHATSAPP_STARTUP_GRACE_PERIOD_MINUTES',
+      10,
+    );
+    this.startupGracePeriodMs = gracePeriodMinutes * 60 * 1000;
+    this.startupTimestamp = Date.now();
 
     if (!region || !accessKeyId || !secretAccessKey) {
       this.logger.error(
@@ -186,6 +204,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       generateHighQualityLinkPreview: false,
       shouldSyncHistoryMessage: () => false,
       printQRInTerminal: false,
+      logger: P({ level: 'silent' }), // Silence Baileys internal logs (E2E session details, etc.)
     });
 
     sock.ev.on('creds.update', saveCreds);
@@ -234,6 +253,16 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     });
 
     sock.ev.on('messages.upsert', async ({ messages }) => {
+      if (this.startupGracePeriodMs > 0) {
+        const timeSinceStartup = Date.now() - this.startupTimestamp;
+        if (timeSinceStartup < this.startupGracePeriodMs) {
+          this.logger.debug(
+            `Skipping message during startup grace period (${Math.round(timeSinceStartup / 1000)}s / ${this.startupGracePeriodMs / 1000}s)`,
+          );
+          return;
+        }
+      }
+
       const parsed = this.mapToSocialMediaEvent({
         msg: messages[0],
         accountId: client.whatsappNumber!,
@@ -277,15 +306,38 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       creds = initAuthCreds();
     }
 
+    // Initialize cache for this credential if not exists
+    if (!this.keyCache.has(credentialValue)) {
+      this.keyCache.set(credentialValue, new Map());
+    }
+    const cache = this.keyCache.get(credentialValue)!;
+
     const keys: SignalKeyStore = {
       get: async (type, ids) => {
         const data: any = {};
         await Promise.all(
           ids.map(async (id) => {
+            const cacheKey = `${type}/${id}`;
+
+            // Check in-memory cache first (null = key doesn't exist in S3)
+            if (cache.has(cacheKey)) {
+              const cachedValue = cache.get(cacheKey);
+              if (cachedValue !== null) {
+                data[id] = cachedValue;
+              }
+              return;
+            }
+
+            // Fallback to S3 if not cached
             const key = `${credentialValue}/keys/${type}/${id}.json`;
             const val = await this.getFromS3(key);
             if (val) {
-              data[id] = JSON.parse(val, BufferJSON.reviver);
+              const parsed = JSON.parse(val, BufferJSON.reviver);
+              cache.set(cacheKey, parsed); // Cache for future use
+              data[id] = parsed;
+            } else {
+              // Cache negative result to avoid repeated S3 lookups
+              cache.set(cacheKey, null);
             }
           }),
         );
@@ -296,6 +348,12 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
         for (const category in data) {
           for (const id in data[category]) {
             const value = data[category][id];
+            const cacheKey = `${category}/${id}`;
+
+            // Update cache immediately
+            cache.set(cacheKey, value);
+
+            // Persist to S3 in background
             const key = `${credentialValue}/keys/${category}/${id}.json`;
             tasks.push(this.saveToS3(key, JSON.stringify(value, BufferJSON.replacer)));
           }
@@ -333,7 +391,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       const buffer = await this.streamToBuffer(val.Body);
       return buffer.toString();
     } catch (e) {
-      this.logger.error(`Failed to get from S3: ${keyName}: ${(e as Error).message}`);
+      this.logger.debug(`Failed to get from S3: ${keyName}: ${(e as Error).message}`);
       return null;
     }
   }
@@ -360,7 +418,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     accountId: string;
   }): SocialMediaEvent | null {
     if (msg.key?.fromMe) {
-      this.logger.debug('Received message from self, skipping.');
+      // Message from self (agent response echo) - skip silently
       return null;
     }
 
@@ -403,6 +461,23 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
           phone: undefined,
         },
       },
+    };
+  }
+
+  /**
+   * Suppresses noisy "Closing session" logs from libsignal-node
+   * which uses console.info() directly and bypasses logger configuration
+   */
+  private suppressLibsignalLogs() {
+    const originalInfo = console.info;
+    console.info = (...args: any[]) => {
+      // Filter out libsignal "Closing session" logs
+      const firstArg = String(args[0] || '');
+      if (firstArg.includes('Closing session')) {
+        return; // Suppress
+      }
+      // Pass through all other console.info calls
+      originalInfo.apply(console, args);
     };
   }
 }

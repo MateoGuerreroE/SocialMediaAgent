@@ -24,6 +24,7 @@ export class GeminiModel implements GenerationModel {
     systemPrompt,
     modelTier = 1,
     expectedFormat,
+    isExpectedFormatArray = false,
   }: SendToModelOptions): Promise<string> {
     let format;
     if (expectedFormat) {
@@ -35,7 +36,24 @@ export class GeminiModel implements GenerationModel {
       systemInstruction: systemPrompt,
       generationConfig: {
         responseMimeType: format ? 'application/json' : 'text/plain',
-        ...(format ? { responseSchema: { type: SchemaType.OBJECT, properties: format } } : {}),
+        ...(format
+          ? {
+              responseSchema: {
+                type: SchemaType.OBJECT,
+                properties: isExpectedFormatArray
+                  ? {
+                      values: {
+                        type: SchemaType.ARRAY,
+                        items: {
+                          type: SchemaType.OBJECT,
+                          properties: format,
+                        },
+                      },
+                    }
+                  : format,
+              },
+            }
+          : {}),
       },
     });
 

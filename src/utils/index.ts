@@ -1,6 +1,8 @@
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
+import merge from 'deepmerge';
+import { CredentialType, Platform, PlatformChannel } from 'src/generated/prisma/enums';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -28,5 +30,19 @@ export class Utils {
 
     const diffDays = now.diff(target, 'day');
     return `${diffDays} days ago at ${target.format('h:mm A')}`;
+  }
+
+  static mergeConfigurationOverrides<T, K extends Partial<T>>(configuration: T, override: K): T {
+    return merge(configuration, override) as T; // Check how useful is for us to have null removing original config values.
+  }
+
+  static resolveRequiredCredential(platform: Platform, channel: PlatformChannel): CredentialType {
+    if (platform === Platform.WHATSAPP) {
+      return CredentialType.WHATSAPP_S3_BUCKET;
+    } else if (platform === Platform.INSTAGRAM && channel === PlatformChannel.DIRECT_MESSAGE) {
+      return CredentialType.APP_ACCESS_TOKEN;
+    } else {
+      return CredentialType.PAGE_ACCESS_TOKEN;
+    }
   }
 }

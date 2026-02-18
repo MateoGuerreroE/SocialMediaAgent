@@ -98,4 +98,17 @@ export class ConversationService {
     }
     await this.conversationMessageRepository.deleteMessage(message.messageId);
   }
+
+  async checkIfMessageExists(externalId: string): Promise<boolean> {
+    return this.conversationMessageRepository.checkIfMessageExists(externalId);
+  }
+
+  async pauseConversation(conversationId: string): Promise<void> {
+    const pausedUntil = new Date(Date.now() + 60 * 12 * 60 * 1000); // Pause for 12 hours
+    await this.conversationRepository.updateConversationPause(conversationId, pausedUntil);
+  }
+
+  async resumeConversation(conversationId: string): Promise<void> {
+    await this.conversationRepository.updateConversationPause(conversationId, null);
+  }
 }

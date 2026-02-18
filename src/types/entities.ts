@@ -1,4 +1,5 @@
 import {
+  AgentActionType,
   AgentKey,
   AgentSessionStatus,
   ApplicationActor,
@@ -110,4 +111,41 @@ export interface AgentSessionEntity {
   conversationId: string;
   state: Record<string, any> | null;
   result: Record<string, any> | null;
+}
+
+export interface AgentActionEntity {
+  actionId: string;
+  agentId: string;
+  actionType: AgentActionType;
+  useCase: string;
+  isActive: boolean;
+  configuration: any; // TODO TYPE THIS!! -> Depends on the action, for example for an alert action it would be the alert channel, the target, etc.
+  createdAt: Date;
+  updatedAt: Date;
+
+  variants?: AgentActionVariantEntity[];
+  policies?: AgentActionPolicy[];
+}
+
+export interface AgentActionVariantEntity {
+  variantId: string;
+  actionId: string;
+  agentId: string;
+  platform: Platform | null;
+  channel: PlatformChannel | null;
+  overrideConfiguration: any; // TODO TYPE THIS!! -> Depends on the action, for example for an alert action it would be the alert channel, the target, etc.
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface AgentActionPolicy {
+  policyId: string;
+  actionId: string;
+  agentId: string;
+  platform: Platform | null;
+  channel: PlatformChannel | null;
+  isAllowed: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }

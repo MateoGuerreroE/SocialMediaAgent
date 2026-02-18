@@ -9,6 +9,7 @@ export type SendToModelOptions = {
   systemPrompt: string;
   modelTier?: number;
   expectedFormat?: ExpectedModelResponseFormat;
+  isExpectedFormatArray?: boolean;
 };
 
 export abstract class GenerationModel {
