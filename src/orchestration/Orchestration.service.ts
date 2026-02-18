@@ -71,7 +71,7 @@ export class OrchestrationService {
 
       await this.conversationService.addUserMessage(conversation, event);
 
-      const { selectedAgent, logId } = await this.requireAgentDecision({
+      const selectedAgent = await this.requireAgentDecision({
         agents: client.agents!,
         conversation,
         message: event.content.text,
@@ -140,10 +140,7 @@ export class OrchestrationService {
     conversation: ConversationEntity;
     message: string;
     messageId: string;
-  }): Promise<{
-    selectedAgent: AgentEntity;
-    logId?: string;
-  }> {
+  }): Promise<AgentEntity> {
     if (conversation.session) {
       const sessionAgent = agents.find(
         (agent) => agent.agentKey === conversation.session!.agentKey,
@@ -152,7 +149,7 @@ export class OrchestrationService {
         this.logger.debug(
           `Existing session found for conversation ${conversation.conversationId}. Automatically selecting agent ${sessionAgent.agentKey}.`,
         );
-        return { selectedAgent: sessionAgent };
+        return sessionAgent;
       }
     }
     const activeAgents = agents.filter((agent) => agent.isActive);
@@ -160,7 +157,7 @@ export class OrchestrationService {
       this.logger.log(
         `Only one agent available (${activeAgents[0].agentKey}). Automatically selecting this agent.`,
       );
-      return { selectedAgent: activeAgents[0] };
+      return activeAgents[0];
     }
 
     const decision = await this.generationService.requestAgentDecision(activeAgents, message);
@@ -170,7 +167,7 @@ export class OrchestrationService {
       this.logger.warn(
         `Model returned an invalid agent key: ${decision.agent}. Defaulting to first agent in the list.`,
       );
-      return { selectedAgent: activeAgents[0] };
+      return activeAgents[0];
     }
 
     const logId = await this.agentLogRepository.createLog({
@@ -188,7 +185,7 @@ export class OrchestrationService {
       `Model decision: Agent ${selectedAgent.agentKey} with score ${decision.decisionScore}. Reason: ${decision.reason}`,
     );
 
-    return { selectedAgent, logId };
+    return selectedAgent;
   }
 
   verifyClient(client: ClientEntity, platform: Platform, channel: PlatformChannel): boolean {
@@ -221,28 +218,16 @@ export class OrchestrationService {
       return false;
     }
 
-    // Define required credentials based on platform/channel
-    const requiredCredentials: CredentialType[] = [];
-
-    if (platform === Platform.INSTAGRAM && channel === PlatformChannel.DIRECT_MESSAGE) {
-      requiredCredentials.push(CredentialType.APP_ACCESS_TOKEN);
-    } else {
-      if (platform === Platform.WHATSAPP) {
-        requiredCredentials.push(CredentialType.WHATSAPP_S3_BUCKET);
-      } else {
-        requiredCredentials.push(CredentialType.PAGE_ACCESS_TOKEN);
-      }
-    }
+    const requiredCredential = Utils.resolveRequiredCredential(platform, channel);
 
     // Check all required credentials in one pass
-    for (const requiredType of requiredCredentials) {
-      const credential = credentials.find((cred) => cred.type === requiredType);
-      if (!credential || (credential.expiresAt && credential.expiresAt < new Date())) {
-        this.logger.warn(
-          `Client ${businessName} does not have a valid ${requiredType} configured or it is expired. Skipping event processing.`,
-        );
-        return false;
-      }
+
+    const credential = credentials.find((cred) => cred.type === requiredCredential);
+    if (!credential || (credential.expiresAt && credential.expiresAt < new Date())) {
+      this.logger.warn(
+        `Client ${businessName} does not have a valid ${requiredCredential} configured or it is expired. Skipping event processing.`,
+      );
+      return false;
     }
 
     if (!client.agents || client.agents.length === 0) {

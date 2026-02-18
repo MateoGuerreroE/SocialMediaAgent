@@ -179,7 +179,10 @@ model ClientAgent {
   // Timestamps
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  // Relations
   client        Client?  @relation(fields: [clientId], references: [clientId])
+  variants      AgentVariant[]
+  policies      AgentPolicy[]
 }
 
 model AgentLog {
@@ -205,15 +208,10 @@ model AgentAction {
   // Timestamps
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
-
-  // Relations
-  variants AgentActionVariant[]
-  policies AgentActionPolicy[]
 }
 
-model AgentActionVariant {
+model AgentVariant {
   variantId             String           @id @default(uuid())
-  actionId              String
   agentId               String
   platform              Platform?
   channel               PlatformChannel?
@@ -224,12 +222,11 @@ model AgentActionVariant {
   updatedAt             DateTime         @updatedAt
 
   // Relations
-  agentAction AgentAction @relation(fields: [actionId], references: [actionId])
+  agent ClientAgent @relation(fields: [agentId], references: [agentId])
 }
 
-model AgentActionPolicy {
+model AgentPolicy {
   policyId  String           @id @default(uuid())
-  actionId  String
   agentId   String
   platform  Platform?
   channel   PlatformChannel?
@@ -239,7 +236,7 @@ model AgentActionPolicy {
   updatedAt DateTime         @updatedAt
 
   // Relations
-  agentAction AgentAction @relation(fields: [actionId], references: [actionId])
+  agent ClientAgent @relation(fields: [agentId], references: [agentId])
 }
 
 model AgentActionLog {
@@ -266,7 +263,7 @@ model AgentSession {
   summary        String?
   conversationId String
   state          Json
-  result         Json
+  result         Json?
 
   // Relations
   conversations Conversation[]

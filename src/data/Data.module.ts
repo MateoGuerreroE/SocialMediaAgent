@@ -3,13 +3,14 @@ import { PrismaService } from './Prisma.service';
 import { ClientRepository } from './repository/Client.repository';
 import { RedisService } from './Redis.service';
 import {
-  AgentActionPolicyRepository,
+  AgentPolicyRepository,
   AgentActionRepository,
-  AgentActionVariantRepository,
+  AgentVariantRepository,
   ClientCredentialRepository,
   ClientEventRepository,
   ConversationMessageRepository,
   ConversationRepository,
+  AgentRepository,
 } from './repository';
 import { AgentLogRepository } from './repository/AgentLog.repository';
 
@@ -20,9 +21,10 @@ import { AgentLogRepository } from './repository/AgentLog.repository';
     RedisService,
     ClientCredentialRepository,
     ConversationRepository,
+    AgentRepository,
     AgentActionRepository,
-    AgentActionVariantRepository,
-    AgentActionPolicyRepository,
+    AgentVariantRepository,
+    AgentPolicyRepository,
     AgentLogRepository,
     ConversationMessageRepository,
     ClientEventRepository,
@@ -31,11 +33,12 @@ import { AgentLogRepository } from './repository/AgentLog.repository';
     ClientRepository,
     RedisService,
     ClientCredentialRepository,
+    AgentRepository,
     ConversationRepository,
     AgentLogRepository,
     AgentActionRepository,
-    AgentActionVariantRepository,
-    AgentActionPolicyRepository,
+    AgentVariantRepository,
+    AgentPolicyRepository,
     ConversationMessageRepository,
     ClientEventRepository,
   ],

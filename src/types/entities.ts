@@ -98,6 +98,9 @@ export interface AgentEntity {
   configuration: any; // TODO TYPE THIS!! -> Examples, tone, general model rules, general retry rules, etc.
   createdAt: Date;
   updatedAt: Date;
+
+  variants?: AgentVariantEntity[];
+  policies?: AgentPolicyEntity[];
 }
 
 export interface AgentSessionEntity {
@@ -109,8 +112,8 @@ export interface AgentSessionEntity {
   status: AgentSessionStatus;
   summary: string | null;
   conversationId: string;
-  state: Record<string, any> | null;
-  result: Record<string, any> | null;
+  state: any; // TODO TYPES THIS
+  result: any | null;
 }
 
 export interface AgentActionEntity {
@@ -122,14 +125,10 @@ export interface AgentActionEntity {
   configuration: any; // TODO TYPE THIS!! -> Depends on the action, for example for an alert action it would be the alert channel, the target, etc.
   createdAt: Date;
   updatedAt: Date;
-
-  variants?: AgentActionVariantEntity[];
-  policies?: AgentActionPolicy[];
 }
 
-export interface AgentActionVariantEntity {
+export interface AgentVariantEntity {
   variantId: string;
-  actionId: string;
   agentId: string;
   platform: Platform | null;
   channel: PlatformChannel | null;
@@ -139,9 +138,8 @@ export interface AgentActionVariantEntity {
   updatedAt: Date;
 }
 
-export interface AgentActionPolicy {
+export interface AgentPolicyEntity {
   policyId: string;
-  actionId: string;
   agentId: string;
   platform: Platform | null;
   channel: PlatformChannel | null;

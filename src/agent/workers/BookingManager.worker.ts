@@ -20,12 +20,12 @@ export class BookingManagerWorker extends WorkerHost {
   }
 
   @OnWorkerEvent('completed')
-  onCompleted(job: any) {
+  onCompleted(job: Job) {
     this.logger.log(`Booking Manager Job ${job.id} completed successfully`);
   }
 
   @OnWorkerEvent('failed')
-  onFailed(job: any, error: Error) {
+  onFailed(job: Job, error: Error) {
     this.logger.error(`Booking Manager Job ${job?.id} failed with error: ${error.message}`);
   }
 }

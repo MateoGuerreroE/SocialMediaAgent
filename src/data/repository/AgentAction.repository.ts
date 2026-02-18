@@ -8,10 +8,6 @@ export class AgentActionRepository {
   async getAgentActionsByAgentId(agentId: string) {
     return this.prisma.agentAction.findMany({
       where: { agentId },
-      include: {
-        variants: true,
-        policies: true,
-      },
     });
   }
 }

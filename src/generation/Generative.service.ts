@@ -193,7 +193,7 @@ export class GenerativeService {
 
     const systemPrompt = this.promptService.getSystemPromptForActionDecision(actions);
     const history = this.promptService.formatConversationHistory(conversationMessages);
-    const prompt = `Given the following conversation history: ${history}\n\nChoose the most appropriate action and return a JSON object with the keys "actionType", "decisionScore" from 0 to 1, and a short "reason" (max 100 chars).`;
+    const prompt = `Given the following conversation history: ${history}\n\nBased on the MOST RECENT message from the user (the last message in the history), choose the most appropriate action. Use the conversation history for context, but make your decision based on what the user just said in their latest message.\n\nReturn a JSON object with the keys "actionType", "decisionScore" from 0 to 1, and a short "reason" (max 100 chars) explaining why this action is appropriate for the most recent message.`;
 
     const generatedResult = await this.model.sendToModel({
       prompt,

@@ -6,5 +6,6 @@ export * from './ConversationMessage.repository';
 export * from './Agent.repository';
 export * from './AgentLog.repository';
 export * from './AgentAction.repository';
-export * from './AgentActionPolicy.repository';
-export * from './AgentActionVariant.repository';
+export * from './AgentPolicy.repository';
+export * from './AgentSession.repository';
+export * from './AgentVariant.repository';

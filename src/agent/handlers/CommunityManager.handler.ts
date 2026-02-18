@@ -35,26 +35,31 @@ export class CommunityManagerHandler {
   ) {}
 
   async handle({ client, conversation, agent, targetId }: CMHandlerContext) {
-    const actions = await this.agentService.getActionsByAgentId(agent.agentId);
+    const agentData = await this.agentService.getAgent(agent.agentId);
+    const actions = await this.agentService.getActionsByAgentId(agentData.agentId);
     const validActions = actions.filter(
       (a) =>
         a.isActive &&
-        this.agentService.checkActionPolicies(a, conversation.platform, conversation.channel),
+        this.agentService.checkAgentPolicies(
+          agentData,
+          conversation.platform,
+          conversation.channel,
+        ),
     );
     if (!validActions.length) {
-      this.logger.warn(`No active actions for agent ${agent.agentId}`);
+      this.logger.warn(`No active actions for agent ${agentData.agentId}`);
       return;
     }
 
     if (validActions.length === 1) {
       this.logger.log(
-        `Single valid action ${validActions[0].actionId} for agent ${agent.agentId}, executing directly`,
+        `Single valid action ${validActions[0].actionId} for agent ${agentData.agentId}, executing directly`,
       );
       await this.handleActionExecution({
         action: validActions[0],
         client,
         conversation,
-        agent,
+        agent: agentData,
         targetId,
       });
     }
@@ -67,7 +72,7 @@ export class CommunityManagerHandler {
     const chosenAction = validActions.find((a) => a.actionType === actionDecision.actionType);
     if (!chosenAction) {
       this.logger.error(
-        `Model chose action type ${actionDecision.actionType} which is not in the list of valid actions for agent ${agent.agentId}`,
+        `Model chose action type ${actionDecision.actionType} which is not in the list of valid actions for agent ${agentData.agentId}`,
       );
       return;
     }
@@ -80,7 +85,7 @@ export class CommunityManagerHandler {
       action: chosenAction,
       client,
       conversation,
-      agent,
+      agent: agentData,
       targetId,
       reason: actionDecision.reason,
       actions,
@@ -102,7 +107,7 @@ export class CommunityManagerHandler {
     action: AgentActionEntity;
     actions?: AgentActionEntity[];
   }) {
-    const variants = action.variants || [];
+    const variants = agent.variants || [];
     if (variants.length) {
       const matchVariant = variants.find(
         (v) => v.platform === conversation.platform && v.channel === conversation.channel,
@@ -113,17 +118,11 @@ export class CommunityManagerHandler {
           `Found matching variant ${matchVariant.variantId} for action ${action.actionId}`,
         );
         // In case variant overrides any of the agent configurations
-        if (matchVariant.overrideConfiguration.agentOverrides)
+        if (matchVariant.overrideConfiguration)
           agent.configuration = Utils.mergeConfigurationOverrides(
             agent.configuration,
-            matchVariant.overrideConfiguration.agentOverrides,
+            matchVariant.overrideConfiguration,
           );
-
-        // Override action configuration with variant configuration if exists
-        action.configuration = Utils.mergeConfigurationOverrides(
-          action.configuration,
-          matchVariant.overrideConfiguration.actionOverrides,
-        );
       }
     }
 

@@ -13,6 +13,12 @@ export class ConversationService {
     private readonly conversationMessageRepository: ConversationMessageRepository,
   ) {}
 
+  async updateConversationSession(conversationId: string, sessionId: string | null) {
+    await this.conversationRepository.updateConversationStatus(conversationId, {
+      activeAgentSessionId: sessionId,
+    });
+  }
+
   async getOrCreateConversation(
     event: SocialMediaEvent,
     clientId: string,

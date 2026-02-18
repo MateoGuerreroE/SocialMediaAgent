@@ -6,6 +6,18 @@ import { AgentEntity } from '../../types/entities';
 export class AgentRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  async getAgentById(agentId: string): Promise<AgentEntity | null> {
+    return this.prisma.clientAgent.findUnique({
+      where: {
+        agentId,
+      },
+      include: {
+        variants: true,
+        policies: true,
+      },
+    });
+  }
+
   async getAgentsByClientId(clientId: string): Promise<AgentEntity[]> {
     return this.prisma.clientAgent.findMany({
       where: {

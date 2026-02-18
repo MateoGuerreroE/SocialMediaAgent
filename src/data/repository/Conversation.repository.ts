@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../Prisma.service';
-import { AgentKey } from '../../generated/prisma/enums';
 import { CreateConversation } from '../../types/transactions';
 import { ConversationEntity } from '../../types/entities';
 
@@ -30,7 +29,7 @@ export class ConversationRepository {
 
   async updateConversationStatus(
     conversationId: string,
-    updates: { activeAgentSessionId?: string; lastMessageAt?: Date },
+    updates: { activeAgentSessionId?: string | null; lastMessageAt?: Date },
   ) {
     await this.prisma.conversation.update({
       where: { conversationId },
