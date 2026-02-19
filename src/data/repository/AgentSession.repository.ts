@@ -19,4 +19,13 @@ export class AgentSessionRepository {
       data: updates,
     });
   }
+
+  async getExistentSession(conversationId: string, agentId: string) {
+    return this.prisma.agentSession.findFirst({
+      where: {
+        conversationId,
+        agentId,
+      },
+    });
+  }
 }

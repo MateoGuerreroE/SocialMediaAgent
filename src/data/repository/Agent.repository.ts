@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../Prisma.service';
 import { AgentEntity } from '../../types/entities';
+import { AgentKey } from 'src/generated/prisma/enums';
 
 @Injectable()
 export class AgentRepository {
@@ -21,6 +22,18 @@ export class AgentRepository {
     return this.prisma.clientAgent.findMany({
       where: {
         clientId: clientId,
+      },
+    });
+  }
+
+  async getClientAgentByKey(clientId: string, key: AgentKey): Promise<AgentEntity | null> {
+    return this.prisma.clientAgent.findFirst({
+      where: {
+        clientId,
+        agentKey: key,
+      },
+      include: {
+        variants: true,
       },
     });
   }

@@ -5,7 +5,7 @@ import {
   AgentSessionRepository,
 } from 'src/data/repository';
 import { AgentCacheService } from './AgentCache.service';
-import { AgentEntity, AgentSessionEntity } from 'src/types/entities';
+import { AgentEntity, AgentSessionEntity, ConversationMessageEntity } from 'src/types/entities';
 import {
   AgentKey,
   AgentSessionStatus,
@@ -14,16 +14,24 @@ import {
 } from 'src/generated/prisma/enums';
 import { NotFoundError } from 'src/types/errors';
 import { Utils } from 'src/utils';
+import { ConversationService } from 'src/messaging';
 
 @Injectable()
 export class AgentService {
   constructor(
     private readonly logger: ConsoleLogger,
     private readonly agentCacheService: AgentCacheService,
+    private readonly conversationService: ConversationService,
     private readonly agentRepository: AgentRepository,
     private readonly agentActionRepository: AgentActionRepository,
     private readonly agentSessionRepository: AgentSessionRepository,
   ) {}
+
+  async getAgentByKey(clientId: string, key: AgentKey): Promise<AgentEntity> {
+    const agent = await this.agentRepository.getClientAgentByKey(clientId, key);
+    if (!agent) throw new NotFoundError(`Agent with key ${key} not found for client ${clientId}`);
+    return agent;
+  }
 
   async updateAgentSession(
     sessionId: string,
@@ -36,6 +44,28 @@ export class AgentService {
     },
   ) {
     return await this.agentSessionRepository.updateAgentSession(sessionId, updates);
+  }
+
+  async verifySessionExistence(
+    conversationId: string,
+    agentId: string,
+  ): Promise<{
+    existingSession: AgentSessionEntity | null;
+    messages: ConversationMessageEntity[];
+  }> {
+    const existingSession = await this.agentSessionRepository.getExistentSession(
+      conversationId,
+      agentId,
+    );
+    if (!existingSession) {
+      return { existingSession: null, messages: [] };
+    }
+
+    const messages = await this.conversationService.getConversationMessagesRelatedToSession(
+      conversationId,
+      existingSession.sessionId,
+    );
+    return { existingSession, messages };
   }
 
   async createAgentSession({

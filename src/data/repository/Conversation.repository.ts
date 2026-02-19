@@ -2,14 +2,19 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../Prisma.service';
 import { CreateConversation } from '../../types/transactions';
 import { ConversationEntity } from '../../types/entities';
+import { PlatformChannel } from 'src/generated/prisma/enums';
 
 @Injectable()
 export class ConversationRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async retrieveConversationBySenderId(senderId: string, postId?: string) {
+  async retrieveConversationBySenderIdAndChannel(
+    senderId: string,
+    channel: PlatformChannel,
+    postId?: string,
+  ) {
     return this.prisma.conversation.findFirst({
-      where: { senderId, postId },
+      where: { senderId, channel, postId },
       include: {
         messages: {
           orderBy: { receivedAt: 'desc' },

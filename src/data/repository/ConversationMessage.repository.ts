@@ -33,4 +33,21 @@ export class ConversationMessageRepository {
       data: { isDeleted: true, deletedAt: new Date() },
     });
   }
+
+  async getMessagesBySessionId(
+    conversationId: string,
+    sessionId: string,
+  ): Promise<ConversationMessageEntity[]> {
+    return this.prisma.conversationMessage.findMany({
+      where: { agentSessionId: sessionId, conversationId },
+      orderBy: { receivedAt: 'desc' },
+    });
+  }
+
+  async updateMessageSession(messageId: string, sessionId: string): Promise<void> {
+    await this.prisma.conversationMessage.update({
+      where: { messageId },
+      data: { agentSessionId: sessionId },
+    });
+  }
 }

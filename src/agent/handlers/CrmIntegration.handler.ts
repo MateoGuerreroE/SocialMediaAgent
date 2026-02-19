@@ -14,9 +14,10 @@ import { Utils } from '../../utils';
 import { CaptureDataAction } from '../actions/CaptureData.action';
 import { GenerationService } from '../../generation';
 import { ReplyAction } from '../actions/Reply.action';
-import { AgentActionType, AgentSessionStatus } from '../../generated/prisma/enums';
+import { AgentActionType, AgentKey, AgentSessionStatus } from '../../generated/prisma/enums';
 import { RetrievedField } from '../types';
 import { AlertAction } from '../actions/Alert.action';
+import { CommunityManagerHandler } from './CommunityManager.handler';
 
 interface CrmSessionState {
   stage: 'confirm_data' | 'capture_data' | 'send_data' | 'complete';
@@ -53,6 +54,7 @@ export class CrmIntegrationHandler {
     private readonly captureDataAction: CaptureDataAction,
     private readonly replyAction: ReplyAction,
     private readonly alertAction: AlertAction,
+    private readonly CMAgentHandler: CommunityManagerHandler,
   ) {}
   // This is a placeholder for where you would implement integration with a CRM system.
   async handle({
@@ -71,14 +73,56 @@ export class CrmIntegrationHandler {
 
     // Validate all prerequisites
     if (!this.validateRequiredActions(actions)) return;
-
-    const session = await this.getOrCreateSession(conversation, validAgent);
-    if (!session) return;
-
+    const requiredActions = this.resolveRequiredActions(actions);
     const credential = this.resolveCredential(conversation, client);
     if (!credential) return;
 
-    const requiredActions = this.resolveRequiredActions(actions);
+    const { existingSession, messages } = await this.agentService.verifySessionExistence(
+      conversation.conversationId,
+      validAgent.agentId,
+    );
+
+    if (existingSession) {
+      if (existingSession.status === AgentSessionStatus.COMPLETED) {
+        this.logger.log(
+          `Existing completed session found for conversation ${conversation.conversationId}. Handling accordingly.`,
+        );
+        await this.handleExistingSession({
+          client,
+          targetId,
+          agent: validAgent,
+          conversation,
+          messages,
+          notificationService: requiredActions.notificationService,
+          credential,
+        });
+
+        await this.agentService.updateAgentSession(existingSession.sessionId, {
+          status: AgentSessionStatus.REALERTED,
+        });
+        return;
+      } else if (existingSession.status === AgentSessionStatus.REALERTED) {
+        this.logger.log(
+          `Existing session already realerted for conversation ${conversation.conversationId}. Routed to CM Agent`,
+        );
+
+        const cmAgent = await this.agentService.getAgentByKey(
+          client.clientId,
+          AgentKey.COMMUNITY_MANAGER,
+        );
+        await this.CMAgentHandler.handle({
+          targetId,
+          conversation,
+          agent: cmAgent,
+          client,
+          routingContext: `Client has returned again to the CRM flow after having a completed session and the team being realerted. Data can't be captured again and someone will contact the user soon.`,
+        });
+        return;
+      }
+    }
+
+    const session = await this.getOrCreateSession(conversation, validAgent);
+    if (!session) return;
 
     switch (session.state.stage) {
       case 'confirm_data':
@@ -162,6 +206,13 @@ export class CrmIntegrationHandler {
       conversation.conversationId,
       session.sessionId,
     );
+
+    // Updates last user message to be related to the session, so that it can be retrieved in the context of the session
+    await this.conversationService.updateMessageSession(
+      conversation?.messages?.[0].messageId ?? '',
+      session.sessionId,
+    );
+    conversation.session = session;
 
     this.logger.log(
       `Created new agent session ${session.sessionId} for conversation ${conversation.conversationId}`,
@@ -262,6 +313,29 @@ export class CrmIntegrationHandler {
     }
 
     const missingStartFields = Utils.filterRequiredFields(initialRequiredField, capturedFields);
+    if (session.status === AgentSessionStatus.STARTED) {
+      const requestMessage = await this.generationService.requestDataReply({
+        client,
+        replyRules: agent.configuration.replyRules,
+        conversationMessages: conversation.messages,
+        requiredFields: missingStartFields,
+        additionalContext: `This is the initial message for confirming required fields. This means the client was just redirected to the CRM capture flow`,
+      });
+
+      await this.sendAndLogMessage({
+        message: requestMessage,
+        conversation,
+        agent,
+        targetId,
+        credential,
+      });
+
+      this.logger.log(`Started confirm data step. Initial request sent`);
+      await this.agentService.updateAgentSession(session.sessionId, {
+        status: AgentSessionStatus.PROCESSING,
+      });
+      return;
+    }
     const { retrieved, missing } = await this.captureDataAction.execute({
       requiredFields: missingStartFields,
       messages: conversation.messages,
@@ -405,13 +479,18 @@ export class CrmIntegrationHandler {
         return;
       }
 
+      const updatedCapturedFields = [...(session.state.capturedFields || []), ...retrieved];
+
       await this.agentService.updateAgentSession(session.sessionId, {
         state: {
           ...session.state,
           stage: 'send_data',
-          capturedFields: [...(session.state.capturedFields || []), ...retrieved],
+          capturedFields: updatedCapturedFields,
         },
       });
+
+      session.state.capturedFields = updatedCapturedFields;
+      session.state.stage = 'send_data';
 
       await this.handleSaveData({
         session,
@@ -449,18 +528,21 @@ export class CrmIntegrationHandler {
     messages: ConversationMessageEntity[];
   }) {
     const configuration = action.configuration;
+    this.logger.debug(`SAVE CONFIGURATION: ${JSON.stringify(configuration, null, 2)}`);
     const urlTarget = configuration.url;
     const capturedFields: RetrievedField[] = session.state.capturedFields;
     const fieldMappings = configuration.fieldMappings;
 
     const mappedFields = capturedFields.reduce((acc, field) => {
-      const mapping = fieldMappings.find((m) => m.key === field.key);
-      const targetField = mapping ? mapping.targetKey : field.key;
+      const mapping = fieldMappings.find((m) => m.sourceField === field.key);
+      const targetField = mapping ? mapping.targetField : field.key;
       return {
         ...acc,
         [targetField]: field.value,
       };
-    });
+    }, {});
+
+    this.logger.debug(`Mapped fields to be sent to CRM: ${JSON.stringify(mappedFields, null, 2)}`);
 
     const summary = await this.generationService.generateConversationSummary(messages);
     if (configuration.uniqueIdentifierField && configuration.uniqueIdentifier) {
@@ -471,7 +553,7 @@ export class CrmIntegrationHandler {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${configuration.authToken}`,
+        Authorization: `${configuration.authHeader}`,
       },
       body: JSON.stringify({
         ...mappedFields,
@@ -480,8 +562,9 @@ export class CrmIntegrationHandler {
     });
 
     if (!response.ok) {
+      const result = await response.text();
       this.logger.error(
-        `Failed to send data to CRM for conversation ${conversation.conversationId}. Status: ${response.status}, Response: ${await response.text()}`,
+        `Failed to send data to CRM for conversation ${conversation.conversationId}. Status: ${response.status}, Response: ${result}`,
       );
 
       const generatedAlert = await this.generationService.generateAlertMessage(
@@ -502,25 +585,29 @@ export class CrmIntegrationHandler {
 
       await this.conversationService.updateConversationSession(conversation.conversationId, null);
       await this.agentService.updateAgentSession(session.sessionId, {
+        summary,
         status: AgentSessionStatus.FAILED,
+        endedAt: new Date(),
+        result,
         state: {
           ...session.state,
           stage: 'complete',
         },
       });
 
+      // TODO IMPLEMENT ALERT ON SUCCESS TOO :)
       const generatedFailedReply = await this.generationService.generateResponseWithClientContext(
         client,
         agent.configuration.replyRules,
         conversation.messages,
-        'You were attempting to save client information to CRM but was not able to do It. Apologize with the client and let them know that probably they already exist in the system and that the person in charge has been alerted to check the issue.',
+        'You were attempting to save client information to CRM but was not able to do It. Reply to the customer apologizing for the inconvenience and let them know that probably they already exist in the system and that the person in charge has been alerted to check the issue.',
       );
 
-      await this.replyAction.execute({
+      await this.sendAndLogMessage({
         message: generatedFailedReply,
-        platform: conversation.platform,
-        channel: conversation.channel,
-        target: targetId,
+        conversation,
+        agent,
+        targetId,
         credential,
       });
 
@@ -533,6 +620,8 @@ export class CrmIntegrationHandler {
     );
     await this.agentService.updateAgentSession(session.sessionId, {
       status: AgentSessionStatus.COMPLETED,
+      summary,
+      endedAt: new Date(),
       state: {
         ...session.state,
         stage: 'complete',
@@ -566,17 +655,62 @@ export class CrmIntegrationHandler {
       client,
       agent.configuration.replyRules,
       conversation.messages,
-      'You have just received several data fields from the client. Acknowledge the receipt of the information and let them know that the process is complete, and that someone will contact them soon regarding the next steps.',
+      'You have just received several data fields from the client. Create a reply acknowledging the receipt of the information and let them know that the process is complete, and that someone will contact them soon regarding the next steps.',
     );
 
-    await this.replyAction.execute({
+    await this.sendAndLogMessage({
       message: generatedReply,
-      platform: conversation.platform,
-      channel: conversation.channel,
-      target: targetId,
+      conversation,
+      agent,
+      targetId,
       credential,
     });
 
     await this.conversationService.updateConversationSession(conversation.conversationId, null);
+  }
+
+  async handleExistingSession({
+    client,
+    targetId,
+    agent,
+    conversation,
+    messages,
+    notificationService,
+    credential,
+  }: {
+    messages: ConversationMessageEntity[];
+    conversation: ConversationEntity;
+    targetId: string;
+    client: ClientEntity;
+    credential: ClientCredentialEntity;
+    notificationService: AgentActionEntity;
+    agent: AgentEntity;
+  }): Promise<void> {
+    const generatedReply = await this.generationService.generateResponseWithClientContext(
+      client,
+      agent.configuration.replyRules,
+      messages,
+      'The client has returned to the CRM flow but there is already a session completed. With the conversation history context for that session, reply letting the customer know that their information has already been received and that the right team has been alerted again and user be contacted soon regarding the next steps.',
+    );
+
+    await this.sendAndLogMessage({
+      message: generatedReply,
+      conversation,
+      credential,
+      agent,
+      targetId,
+    });
+
+    const alertMessage = await this.generationService.generateAlertMessage(
+      'Client has returned to the CRM flow but there is already a session completed. Alerting the team again with the conversation history context for that session, so they can check the case again and contact the client if needed.',
+      messages,
+    );
+
+    await this.alertAction.execute({
+      generatedMessage: alertMessage,
+      alertTarget: notificationService.configuration.alertTarget,
+      alertChannel: notificationService.configuration.alertChannel,
+      clientContext: `Message received at: ${new Date().toISOString()}, for platform: ${conversation.platform}, channel: ${conversation.channel}`,
+    });
   }
 }

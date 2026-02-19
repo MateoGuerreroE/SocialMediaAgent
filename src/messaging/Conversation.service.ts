@@ -13,10 +13,18 @@ export class ConversationService {
     private readonly conversationMessageRepository: ConversationMessageRepository,
   ) {}
 
+  async updateMessageSession(messageId: string, sessionId: string): Promise<void> {
+    await this.conversationMessageRepository.updateMessageSession(messageId, sessionId);
+  }
+
   async updateConversationSession(conversationId: string, sessionId: string | null) {
     await this.conversationRepository.updateConversationStatus(conversationId, {
       activeAgentSessionId: sessionId,
     });
+  }
+
+  async getConversationMessagesRelatedToSession(conversationId: string, sessionId: string) {
+    return this.conversationMessageRepository.getMessagesBySessionId(conversationId, sessionId);
   }
 
   async getOrCreateConversation(
@@ -25,8 +33,9 @@ export class ConversationService {
   ): Promise<ConversationEntity> {
     const { metadata } = event;
 
-    const conversation = await this.conversationRepository.retrieveConversationBySenderId(
+    const conversation = await this.conversationRepository.retrieveConversationBySenderIdAndChannel(
       metadata.sender.id,
+      event.channel,
       metadata.postId,
     );
 

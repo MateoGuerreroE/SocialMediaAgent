@@ -62,6 +62,7 @@ enum AgentSessionStatus {
   STARTED
   PROCESSING
   COMPLETED
+  REALERTED
   FAILED
 }
 

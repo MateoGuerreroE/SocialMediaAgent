@@ -19,6 +19,7 @@ type CMHandlerContext = {
   conversation: ConversationEntity;
   agent: AgentEntity;
   targetId: string;
+  routingContext?: string;
 };
 
 @Injectable()
@@ -32,7 +33,7 @@ export class CommunityManagerHandler {
     private readonly alertAction: AlertAction,
   ) {}
 
-  async handle({ client, conversation, agent, targetId }: CMHandlerContext) {
+  async handle({ client, conversation, agent, targetId, routingContext }: CMHandlerContext) {
     const agentData = await this.agentService.getAgent(agent.agentId);
     const actions = await this.agentService.getActionsByAgentId(agentData.agentId);
 
@@ -80,6 +81,7 @@ export class CommunityManagerHandler {
       targetId,
       reason: actionDecision.reason,
       actions,
+      routingContext,
     });
   }
 
@@ -91,6 +93,7 @@ export class CommunityManagerHandler {
     agent,
     targetId,
     actions,
+    routingContext,
   }: CMHandlerContext & {
     reason?: string;
     action: AgentActionEntity;
@@ -136,6 +139,7 @@ export class CommunityManagerHandler {
           agent,
           targetId,
           credential,
+          routingContext,
         });
         break;
       case AgentActionType.ALERT:
@@ -145,6 +149,7 @@ export class CommunityManagerHandler {
           agent,
           reason,
           conversation,
+          routingContext,
         });
         break;
       case AgentActionType.ESCALATE:
@@ -161,12 +166,14 @@ export class CommunityManagerHandler {
     targetId,
     conversation,
     credential,
+    routingContext,
   }: {
     client: ClientEntity;
     targetId: string;
     conversation: ConversationEntity;
     agent: AgentEntity;
     credential: ClientCredentialEntity;
+    routingContext?: string;
   }) {
     const agentConfig = agent.configuration;
 
@@ -174,6 +181,9 @@ export class CommunityManagerHandler {
       client,
       agentConfig.replyRules,
       conversation.messages,
+      routingContext
+        ? `You have been routed from another agent with the following context: ${routingContext}.\nGiven the following conversation, and the context for routing, provide the client an appropiate response:`
+        : undefined,
     );
 
     await this.replyAction.execute({
@@ -194,6 +204,7 @@ export class CommunityManagerHandler {
     reason,
     conversation,
     actions,
+    routingContext,
   }: {
     agent: AgentEntity;
     client: ClientEntity;
@@ -201,6 +212,7 @@ export class CommunityManagerHandler {
     reason?: string;
     action: AgentActionEntity;
     actions?: AgentActionEntity[];
+    routingContext?: string;
   }) {
     try {
       if (!reason || !actions) throw new Error('Reason and actions is required for alert actions');
@@ -247,6 +259,7 @@ export class CommunityManagerHandler {
         credential: replyCreds,
         conversation,
         targetId: conversation.senderId,
+        routingContext,
       });
     } catch (e) {
       this.logger.error(
