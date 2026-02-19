@@ -208,15 +208,21 @@ export class CrmIntegrationHandler {
   /**
    * Sends a message to the user and adds it to the conversation
    */
-  private async sendAndLogMessage(
-    message: string,
-    conversation: ConversationEntity,
-    agent: AgentEntity,
-    targetId: string,
-    credential: ClientCredentialEntity,
-    platform: any,
-    channel: any,
-  ): Promise<void> {
+  private async sendAndLogMessage({
+    message,
+    conversation,
+    agent,
+    targetId,
+    credential,
+  }: {
+    message: string;
+    conversation: ConversationEntity;
+    agent: AgentEntity;
+    targetId: string;
+    credential: ClientCredentialEntity;
+  }): Promise<void> {
+    const { platform, channel } = conversation;
+
     await this.replyAction.execute({
       message,
       platform,
@@ -269,15 +275,13 @@ export class CrmIntegrationHandler {
         replyRules: agent.configuration.replyRules,
       });
 
-      await this.sendAndLogMessage(
-        generatedRequirement,
+      await this.sendAndLogMessage({
+        message: generatedRequirement,
         conversation,
         agent,
         targetId,
         credential,
-        conversation.platform,
-        conversation.channel,
-      );
+      });
 
       const newState = {
         ...session.state,
@@ -351,15 +355,13 @@ export class CrmIntegrationHandler {
         additionalContext: `This is the initial message for requesting this fields. Acknowledge the received information and request all the required fields`,
       });
 
-      await this.sendAndLogMessage(
-        requestMessage,
+      await this.sendAndLogMessage({
+        message: requestMessage,
         conversation,
         agent,
         targetId,
         credential,
-        conversation.platform,
-        conversation.channel,
-      );
+      });
 
       this.logger.log(`Started capture data step. Initial request sent`);
       return;
@@ -379,15 +381,13 @@ export class CrmIntegrationHandler {
         replyRules: agent.configuration.replyRules,
       });
 
-      await this.sendAndLogMessage(
-        generatedRequirement,
+      await this.sendAndLogMessage({
+        message: generatedRequirement,
         conversation,
         agent,
         targetId,
         credential,
-        conversation.platform,
-        conversation.channel,
-      );
+      });
 
       const newState = {
         ...session.state,

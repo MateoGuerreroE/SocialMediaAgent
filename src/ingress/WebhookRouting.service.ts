@@ -62,9 +62,15 @@ export class WebhookRoutingService {
   }
 
   private readonly sendToOrchestrationQueue = async (event: SocialMediaEvent) => {
+    if (event.accountId === event.metadata.sender.id) {
+      this.logger.debug(`Self message received. Ingoring`);
+      return;
+    }
+
     await this.orchestrationQueue.add('message_received', event, {
       jobId: event.messageId,
       attempts: 1,
+      removeOnComplete: { age: 60 },
     });
   };
 

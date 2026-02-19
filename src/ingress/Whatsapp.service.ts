@@ -128,6 +128,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
   private async sendToOrchestration(event: SocialMediaEvent): Promise<void> {
     await this.orchestrationQueue.add('socialMediaEvent', event, {
       jobId: event.messageId,
+      removeOnComplete: { age: 60 },
     });
   }
 

@@ -3,6 +3,7 @@ import { ConsoleLogger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { CommunityManagerHandler } from '../handlers/CommunityManager.handler';
 import { WorkerJobData } from '../types';
+import { MessageWindowService } from 'src/messaging/MessageWindow.service';
 
 @Processor('agent-community-manager', {
   concurrency: 5,
@@ -14,6 +15,7 @@ import { WorkerJobData } from '../types';
 export class CommunityManagerWorker extends WorkerHost {
   constructor(
     private readonly logger: ConsoleLogger,
+    private readonly messageWindowService: MessageWindowService,
     private readonly handler: CommunityManagerHandler,
   ) {
     super();
@@ -24,14 +26,20 @@ export class CommunityManagerWorker extends WorkerHost {
       `Processing Community Manager Job ${job.id} for agent ${job.data.agent.agentId}`,
     );
     const { client, conversation, agent } = job.data;
-    const targetId = job.data.event.targetId;
+    try {
+      const targetId = job.data.event.targetId;
 
-    await this.handler.handle({
-      client,
-      conversation,
-      agent,
-      targetId,
-    });
+      await this.handler.handle({
+        client,
+        conversation,
+        agent,
+        targetId,
+      });
+    } catch (e) {
+      this.logger.error(`Unable to process Community Manager Job`);
+    } finally {
+      await this.messageWindowService.deleteProcessingKey(conversation.conversationId);
+    }
   }
 
   @OnWorkerEvent('completed')

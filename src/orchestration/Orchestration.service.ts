@@ -3,15 +3,16 @@ import { SocialMediaEvent } from '../types/messages';
 import { ClientService } from '../client';
 import { ConversationService } from '../messaging/Conversation.service';
 import { AgentEntity, ClientEntity, ConversationEntity } from '../types/entities';
-import { CredentialType, Platform, PlatformChannel } from '../generated/prisma/enums';
+import { Platform, PlatformChannel } from '../generated/prisma/enums';
 import { GenerationService } from '../generation';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { MessageWindowService } from '../messaging/MessageWindow.service';
 import { EarlyTerminationError } from '../types/errors/EarlyTerminationError';
-import { Utils } from '../utils';
 import { AgentLogRepository } from 'src/data/repository';
 import { WorkerJobData } from 'src/agent/types';
+import { Utils } from 'src/utils';
+import { AgentService } from 'src/agent/Agent.service';
 
 @Injectable()
 export class OrchestrationService {
@@ -22,6 +23,7 @@ export class OrchestrationService {
     private readonly generationService: GenerationService,
     private readonly messageWindowService: MessageWindowService,
     private readonly agentLogRepository: AgentLogRepository,
+    private readonly agentService: AgentService,
     @InjectQueue('agent-community-manager') private readonly agentCommunityManagerQueue: Queue,
     @InjectQueue('agent-crm-integration') private readonly agentCrmIntegrationQueue: Queue,
     @InjectQueue('agent-booking-manager') private readonly agentBookingManagerQueue: Queue,
@@ -115,16 +117,19 @@ export class OrchestrationService {
       case 'COMMUNITY_MANAGER':
         await this.agentCommunityManagerQueue.add('handleEvent', payload, {
           jobId: event.messageId,
+          removeOnComplete: { age: 60 },
         });
         break;
       case 'CRM_INTEGRATION':
         await this.agentCrmIntegrationQueue.add('handleEvent', payload, {
           jobId: event.messageId,
+          removeOnComplete: { age: 60 },
         });
         break;
       case 'BOOKING_MANAGER':
         await this.agentBookingManagerQueue.add('handleEvent', payload, {
           jobId: event.messageId,
+          removeOnComplete: { age: 60 },
         });
         break;
     }
@@ -152,7 +157,11 @@ export class OrchestrationService {
         return sessionAgent;
       }
     }
-    const activeAgents = agents.filter((agent) => agent.isActive);
+    const activeAgents = agents.filter(
+      (agent) =>
+        agent.isActive &&
+        this.agentService.checkAgentPolicies(agent, conversation.platform, conversation.channel),
+    );
     if (activeAgents.length === 1) {
       this.logger.log(
         `Only one agent available (${activeAgents[0].agentKey}). Automatically selecting this agent.`,

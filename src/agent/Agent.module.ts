@@ -10,6 +10,8 @@ import { AgentService } from './Agent.service';
 import { AgentCacheService } from './AgentCache.service';
 import { IngressModule } from 'src/ingress/Ingress.module';
 import { MessagingModule } from 'src/messaging/Messaging.module';
+import { CrmIntegrationHandler } from './handlers/CrmIntegration.handler';
+import { CaptureDataAction } from './actions/CaptureData.action';
 
 @Module({
   imports: [DataModule, GenerationModule, IngressModule, MessagingModule],
@@ -17,10 +19,13 @@ import { MessagingModule } from 'src/messaging/Messaging.module';
     AgentService,
     AgentCacheService,
     CommunityManagerWorker,
+    CrmIntegrationHandler,
     CrmIntegrationWorker,
     CommunityManagerHandler,
     AlertAction,
+    CaptureDataAction,
     ReplyAction,
   ],
+  exports: [AgentService],
 })
 export class AgentModule {}

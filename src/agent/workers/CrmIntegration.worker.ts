@@ -1,8 +1,9 @@
 import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { ConsoleLogger } from '@nestjs/common';
 import { Job } from 'bullmq';
-import { MessageWindowService } from 'src/messaging/MessageWindow.service';
 import { WorkerJobData } from '../types';
+import { CrmIntegrationHandler } from '../handlers/CrmIntegration.handler';
+import { MessageWindowService } from 'src/messaging/MessageWindow.service';
 
 @Processor('agent-crm-integration', {
   concurrency: 5,
@@ -15,14 +16,30 @@ export class CrmIntegrationWorker extends WorkerHost {
   constructor(
     private readonly logger: ConsoleLogger,
     private readonly messageWindowService: MessageWindowService,
+    private readonly crmIntegrationHandler: CrmIntegrationHandler,
   ) {
     super();
   }
 
   async process(job: Job<WorkerJobData>): Promise<void> {
     this.logger.log(`Handling CRM integration event: ${JSON.stringify(job.data, null, 2)}`);
-    await this.messageWindowService.deleteProcessingKey(job.data.conversation.conversationId);
-    return Promise.resolve();
+
+    this.logger.log(`Processing CRM Integration Job ${job.id} for agent ${job.data.agent.agentId}`);
+    const { client, conversation, agent } = job.data;
+    try {
+      const targetId = job.data.event.targetId;
+
+      await this.crmIntegrationHandler.handle({
+        client,
+        conversation,
+        agent,
+        targetId,
+      });
+    } catch (e) {
+      this.logger.error(`Unable to process CRM Integration Job: ${e.message}`);
+    } finally {
+      await this.messageWindowService.deleteProcessingKey(conversation.conversationId);
+    }
   }
 
   @OnWorkerEvent('completed')

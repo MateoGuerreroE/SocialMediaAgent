@@ -29,7 +29,6 @@ export class CommunityManagerHandler {
     private readonly agentService: AgentService,
     private readonly generationService: GenerationService,
     private readonly replyAction: ReplyAction,
-    private readonly messageWindowService: MessageWindowService,
     private readonly conversationService: ConversationService,
     private readonly alertAction: AlertAction,
   ) {}
@@ -37,17 +36,6 @@ export class CommunityManagerHandler {
   async handle({ client, conversation, agent, targetId }: CMHandlerContext) {
     const agentData = await this.agentService.getAgent(agent.agentId);
     const actions = await this.agentService.getActionsByAgentId(agentData.agentId);
-    const canExecute = this.agentService.checkAgentPolicies(
-      agentData,
-      conversation.platform,
-      conversation.channel,
-    );
-    if (!canExecute) {
-      this.logger.warn(
-        `Agent ${agentData.agentId} policies do not allow execution in conversation ${conversation.conversationId}`,
-      );
-      return;
-    }
 
     const validActions = actions.filter((a) => a.isActive);
     if (!validActions.length) {
@@ -94,8 +82,6 @@ export class CommunityManagerHandler {
       reason: actionDecision.reason,
       actions,
     });
-
-    await this.messageWindowService.deleteProcessingKey(conversation.conversationId);
   }
 
   private async handleActionExecution({

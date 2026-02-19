@@ -4,6 +4,7 @@ import timezone from 'dayjs/plugin/timezone';
 import merge from 'deepmerge';
 import { CredentialType, Platform, PlatformChannel } from 'src/generated/prisma/enums';
 import { RequiredField, RetrievedField } from '../agent/types';
+import { ClientEntity } from 'src/types/entities';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);

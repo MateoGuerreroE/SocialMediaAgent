@@ -112,7 +112,7 @@ export class ReplyAction {
       throw new ConflictError('Invalid credential type for replying to meta DM on Facebook');
     }
 
-    const targetUrl = `https://graph.${platform === Platform.INSTAGRAM ? 'instagram' : 'facebook'}.com/v24.0/${target}/messages`;
+    const targetUrl = `https://graph.${platform === Platform.INSTAGRAM ? 'instagram' : 'facebook'}.com/v24.0/me/messages`;
 
     const formData = new URLSearchParams();
     formData.append('recipient', JSON.stringify({ id: target }));
