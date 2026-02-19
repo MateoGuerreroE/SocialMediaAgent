@@ -75,7 +75,7 @@ export class CrmIntegrationHandler {
     const session = await this.getOrCreateSession(conversation, validAgent);
     if (!session) return;
 
-    const credential = await this.resolveCredential(conversation, client);
+    const credential = this.resolveCredential(conversation, client);
     if (!credential) return;
 
     const requiredActions = this.resolveRequiredActions(actions);
@@ -173,10 +173,10 @@ export class CrmIntegrationHandler {
   /**
    * Resolves the credential needed for the conversation's platform/channel
    */
-  private async resolveCredential(
+  private resolveCredential(
     conversation: ConversationEntity,
     client: ClientEntity,
-  ): Promise<ClientCredentialEntity | null> {
+  ): ClientCredentialEntity | null {
     const requiredCredentialType = Utils.resolveRequiredCredential(
       conversation.platform,
       conversation.channel,
