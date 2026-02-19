@@ -18,6 +18,18 @@ import { AgentActionType, AgentSessionStatus } from '../../generated/prisma/enum
 import { RetrievedField } from '../types';
 import { AlertAction } from '../actions/Alert.action';
 
+interface CrmSessionState {
+  stage: 'confirm_data' | 'capture_data' | 'send_data' | 'complete';
+  confirmedFields: RetrievedField[];
+  capturedFields: RetrievedField[];
+}
+
+interface RequiredActions {
+  fieldExtractor: AgentActionEntity;
+  notificationService: AgentActionEntity;
+  crmSubmitter: AgentActionEntity;
+}
+
 @Injectable()
 export class CrmIntegrationHandler {
   readonly requiredActions: AgentActionType[] = [
@@ -26,6 +38,12 @@ export class CrmIntegrationHandler {
     AgentActionType.CAPTURE_DATA,
     AgentActionType.REPLY,
   ];
+
+  private readonly initialSessionState: CrmSessionState = {
+    stage: 'confirm_data',
+    confirmedFields: [],
+    capturedFields: [],
+  };
 
   constructor(
     private readonly logger: ConsoleLogger,
@@ -48,67 +66,19 @@ export class CrmIntegrationHandler {
     agent: AgentEntity;
     client: ClientEntity;
   }) {
-    let session: AgentSessionEntity;
     const validAgent = await this.agentService.getAgent(agent.agentId);
     const actions = await this.agentService.getActionsByAgentId(validAgent.agentId);
 
-    // Verify all required actions exist
-    const allRequiredActionsPresent = this.requiredActions.every((required) =>
-      actions.some((a) => a.actionType === required),
-    );
+    // Validate all prerequisites
+    if (!this.validateRequiredActions(actions)) return;
 
-    if (!allRequiredActionsPresent) {
-      this.logger.warn(
-        `CRM Agent missing required actions. Required: ${this.requiredActions.join(', ')}. Found: ${actions.map((a) => a.actionType).join(', ')}. Skipping`,
-      );
-      return;
-    }
+    const session = await this.getOrCreateSession(conversation, validAgent);
+    if (!session) return;
 
-    if (!conversation.activeAgentSessionId) {
-      session = await this.agentService.createAgentSession({
-        conversationId: conversation.conversationId,
-        agentId: validAgent.agentId,
-        agentKey: validAgent.agentKey,
-        state: {
-          stage: 'confirm_data',
-          confirmedFields: [],
-          capturedFields: [],
-        },
-      });
-      this.logger.log(
-        `Created new agent session with ID ${session.sessionId} for conversation ${conversation.conversationId}`,
-      );
+    const credential = await this.resolveCredential(conversation, client);
+    if (!credential) return;
 
-      await this.conversationService.updateConversationSession(
-        conversation.conversationId,
-        session.sessionId,
-      );
-    } else {
-      if (!conversation.session) {
-        this.logger.error(
-          `Conversation ${conversation.conversationId} has an activeAgentSessionId but no session data`,
-        );
-        return;
-      }
-      session = conversation.session;
-    }
-
-    const requiredCredential = Utils.resolveRequiredCredential(
-      conversation.platform,
-      conversation.channel,
-    );
-    const credential = client.credentials?.find((cred) => cred.type === requiredCredential);
-
-    if (!credential) {
-      this.logger.error(
-        `No credential of type ${requiredCredential} found for client ${client.clientId} while handling CRM integration`,
-      );
-      return;
-    }
-
-    const fieldExtractor = actions.find((a) => a.actionType === AgentActionType.CAPTURE_DATA)!;
-    const notificationService = actions.find((a) => a.actionType === AgentActionType.ALERT)!;
-    const crmSubmitter = actions.find((a) => a.actionType === AgentActionType.EXECUTE_EXTERNAL)!;
+    const requiredActions = this.resolveRequiredActions(actions);
 
     switch (session.state.stage) {
       case 'confirm_data':
@@ -116,7 +86,7 @@ export class CrmIntegrationHandler {
           client,
           agent: validAgent,
           targetId,
-          action: fieldExtractor,
+          action: requiredActions.fieldExtractor,
           credential,
           conversation,
           session,
@@ -124,10 +94,10 @@ export class CrmIntegrationHandler {
         break;
       case 'capture_data':
         await this.handleCaptureData({
-          action: fieldExtractor,
+          action: requiredActions.fieldExtractor,
           client,
-          notificationService,
-          crmSubmitter,
+          notificationService: requiredActions.notificationService,
+          crmSubmitter: requiredActions.crmSubmitter,
           targetId,
           credential,
           session,
@@ -145,6 +115,117 @@ export class CrmIntegrationHandler {
         this.logger.warn(`Unknown stage '${session.state.stage}' for session ${session.sessionId}`);
         return;
     }
+  }
+
+  /**
+   * Validates that all required agent actions exist
+   */
+  private validateRequiredActions(actions: AgentActionEntity[]): boolean {
+    const allRequiredActionsPresent = this.requiredActions.every((required) =>
+      actions.some((a) => a.actionType === required),
+    );
+
+    if (!allRequiredActionsPresent) {
+      this.logger.warn(
+        `CRM Agent missing required actions. Required: ${this.requiredActions.join(', ')}. Found: ${actions.map((a) => a.actionType).join(', ')}. Skipping`,
+      );
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Gets existing session or creates new one if conversation is not yet bound
+   */
+  private async getOrCreateSession(
+    conversation: ConversationEntity,
+    agent: AgentEntity,
+  ): Promise<AgentSessionEntity | null> {
+    if (conversation.activeAgentSessionId) {
+      if (!conversation.session) {
+        this.logger.error(
+          `Conversation ${conversation.conversationId} has activeAgentSessionId but no session data`,
+        );
+        return null;
+      }
+      return conversation.session;
+    }
+
+    const session = await this.agentService.createAgentSession({
+      conversationId: conversation.conversationId,
+      agentId: agent.agentId,
+      agentKey: agent.agentKey,
+      state: this.initialSessionState,
+    });
+
+    await this.conversationService.updateConversationSession(
+      conversation.conversationId,
+      session.sessionId,
+    );
+
+    this.logger.log(
+      `Created new agent session ${session.sessionId} for conversation ${conversation.conversationId}`,
+    );
+
+    return session;
+  }
+
+  /**
+   * Resolves the credential needed for the conversation's platform/channel
+   */
+  private async resolveCredential(
+    conversation: ConversationEntity,
+    client: ClientEntity,
+  ): Promise<ClientCredentialEntity | null> {
+    const requiredCredentialType = Utils.resolveRequiredCredential(
+      conversation.platform,
+      conversation.channel,
+    );
+
+    const credential = client.credentials?.find((cred) => cred.type === requiredCredentialType);
+
+    if (!credential) {
+      this.logger.error(
+        `No credential of type ${requiredCredentialType} found for client ${client.clientId}`,
+      );
+      return null;
+    }
+
+    return credential;
+  }
+
+  /**
+   * Resolves all required agent actions from the actions list
+   */
+  private resolveRequiredActions(actions: AgentActionEntity[]): RequiredActions {
+    return {
+      fieldExtractor: actions.find((a) => a.actionType === AgentActionType.CAPTURE_DATA)!,
+      notificationService: actions.find((a) => a.actionType === AgentActionType.ALERT)!,
+      crmSubmitter: actions.find((a) => a.actionType === AgentActionType.EXECUTE_EXTERNAL)!,
+    };
+  }
+
+  /**
+   * Sends a message to the user and adds it to the conversation
+   */
+  private async sendAndLogMessage(
+    message: string,
+    conversation: ConversationEntity,
+    agent: AgentEntity,
+    targetId: string,
+    credential: ClientCredentialEntity,
+    platform: any,
+    channel: any,
+  ): Promise<void> {
+    await this.replyAction.execute({
+      message,
+      platform,
+      channel,
+      target: targetId,
+      credential,
+    });
+
+    await this.conversationService.addAgentMessage(conversation, agent.agentId, message);
   }
 
   private async handleConfirmData({
@@ -188,21 +269,16 @@ export class CrmIntegrationHandler {
         replyRules: agent.configuration.replyRules,
       });
 
-      await this.replyAction.execute({
-        message: generatedRequirement,
-        platform: conversation.platform,
-        channel: conversation.channel,
-        target: targetId,
-        credential,
-      });
-
-      await this.conversationService.addAgentMessage(
-        conversation,
-        agent.agentId,
+      await this.sendAndLogMessage(
         generatedRequirement,
+        conversation,
+        agent,
+        targetId,
+        credential,
+        conversation.platform,
+        conversation.channel,
       );
 
-      // Status update on session
       const newState = {
         ...session.state,
         confirmedFields: [...(session.state.confirmedFields || []), ...retrieved],
@@ -275,17 +351,17 @@ export class CrmIntegrationHandler {
         additionalContext: `This is the initial message for requesting this fields. Acknowledge the received information and request all the required fields`,
       });
 
-      await this.replyAction.execute({
-        message: requestMessage,
-        platform: conversation.platform,
-        target: targetId,
-        channel: conversation.channel,
+      await this.sendAndLogMessage(
+        requestMessage,
+        conversation,
+        agent,
+        targetId,
         credential,
-      });
+        conversation.platform,
+        conversation.channel,
+      );
 
       this.logger.log(`Started capture data step. Initial request sent`);
-      await this.conversationService.addAgentMessage(conversation, agent.agentId, requestMessage);
-
       return;
     }
 
@@ -303,21 +379,16 @@ export class CrmIntegrationHandler {
         replyRules: agent.configuration.replyRules,
       });
 
-      await this.replyAction.execute({
-        message: generatedRequirement,
-        platform: conversation.platform,
-        channel: conversation.channel,
-        target: targetId,
-        credential,
-      });
-
-      await this.conversationService.addAgentMessage(
-        conversation,
-        agent.agentId,
+      await this.sendAndLogMessage(
         generatedRequirement,
+        conversation,
+        agent,
+        targetId,
+        credential,
+        conversation.platform,
+        conversation.channel,
       );
 
-      // Status update on session
       const newState = {
         ...session.state,
         capturedFields: [...(session.state.capturedFields || []), ...retrieved],
