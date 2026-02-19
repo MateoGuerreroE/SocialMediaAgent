@@ -12,7 +12,6 @@ import { AgentActionType, Platform } from 'src/generated/prisma/enums';
 import { GenerationService } from 'src/generation';
 import { ReplyAction } from '../actions/Reply.action';
 import { AlertAction } from '../actions/Alert.action';
-import { MessageWindowService } from 'src/messaging/MessageWindow.service';
 import { ConversationService } from 'src/messaging';
 
 type CMHandlerContext = {
@@ -100,7 +99,9 @@ export class CommunityManagerHandler {
     const variants = agent.variants || [];
     if (variants.length) {
       const matchVariant = variants.find(
-        (v) => v.platform === conversation.platform && v.channel === conversation.channel,
+        (v) =>
+          (v.platform === null || v.platform === conversation.platform) &&
+          (v.channel === null || v.channel === conversation.channel),
       );
 
       if (matchVariant && matchVariant.isActive) {

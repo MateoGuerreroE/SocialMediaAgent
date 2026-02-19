@@ -13,7 +13,6 @@ export class AgentRepository {
       },
       include: {
         variants: true,
-        policies: true,
       },
     });
   }
