@@ -212,7 +212,10 @@ export class CrmIntegrationHandler {
       conversation?.messages?.[0].messageId ?? '',
       session.sessionId,
     );
+
+    // Update the in-memory conversation object to reflect the session binding
     conversation.session = session;
+    conversation.activeAgentSessionId = session.sessionId;
 
     this.logger.log(
       `Created new agent session ${session.sessionId} for conversation ${conversation.conversationId}`,
