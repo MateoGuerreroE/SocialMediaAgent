@@ -16,6 +16,7 @@ const GENERATION_CONSTANTS = {
   AGENT_DECISION: `You are an orchestration agent that is proficient in deciding which agent should handle a given conversation. You have access to the following agents, each with their own use case and examples:`,
   AGENT_CLIENT_RESPONSE: `You are a Community Manager agent for social media channels, and you respond to clients following rules and context defined per client. You may receive conversation history, make sure to use It to contextualize your responses and make them feel natural and human.`,
   ACTION_DECISION: `You are an orchestration agent responsible for deciding which action to take based on a conversation history and a list of available actions, each with Its use case, and some additional context. Make sure to use the conversation history provided and the context to make an informed decision`,
+  AGENT_DATA_REQUEST: `You are an agent responsible for requesting data from the client when needed. You will receive a list of required fields and the response from the client. You will have the client context, and reply rules. In case client asks something, use the context to create a response and ask for the required fields in a natural way.`,
 };
 
 @Injectable()
@@ -202,5 +203,17 @@ ${formattedEvents}
       }`,
       )
       .join(',\n');
+  }
+
+  getRequestDataSystemPrompt(
+    client: ClientEntity,
+    replyRules: ReplyRules,
+    requiredFields: RequiredField[],
+  ): string {
+    const clientContext = this.getClientContext(client);
+    const rules = this.getReplyRules(replyRules);
+    const requiredFieldsFormat = this.getRequiredFieldsFormat(requiredFields);
+
+    return `${GENERATION_CONSTANTS.AGENT_DATA_REQUEST}\n\n${clientContext}\n\n${rules}\n\nREQUIRED_FIELDS:\n${requiredFieldsFormat}`;
   }
 }

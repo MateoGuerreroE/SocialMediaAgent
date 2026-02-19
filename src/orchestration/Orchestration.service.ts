@@ -4,7 +4,7 @@ import { ClientService } from '../client';
 import { ConversationService } from '../messaging/Conversation.service';
 import { AgentEntity, ClientEntity, ConversationEntity } from '../types/entities';
 import { CredentialType, Platform, PlatformChannel } from '../generated/prisma/enums';
-import { GenerativeService } from '../generation';
+import { GenerationService } from '../generation';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { MessageWindowService } from '../messaging/MessageWindow.service';
@@ -19,7 +19,7 @@ export class OrchestrationService {
     private readonly logger: ConsoleLogger,
     private readonly clientService: ClientService,
     private readonly conversationService: ConversationService,
-    private readonly generationService: GenerativeService,
+    private readonly generationService: GenerationService,
     private readonly messageWindowService: MessageWindowService,
     private readonly agentLogRepository: AgentLogRepository,
     @InjectQueue('agent-community-manager') private readonly agentCommunityManagerQueue: Queue,

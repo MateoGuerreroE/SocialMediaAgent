@@ -1,1 +1,1 @@
-export * from './Generative.service';
+export * from './Generation.service';

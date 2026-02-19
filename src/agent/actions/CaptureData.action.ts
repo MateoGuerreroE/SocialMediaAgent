@@ -1,13 +1,14 @@
 import { ConsoleLogger, Injectable } from '@nestjs/common';
 import { RequiredField, RetrievedField } from '../types';
 import { ConversationMessageEntity } from 'src/types/entities';
-import { GenerativeService } from 'src/generation';
+import { GenerationService } from 'src/generation';
+import { Utils } from '../../utils';
 
 @Injectable()
 export class CaptureDataAction {
   constructor(
     private readonly logger: ConsoleLogger,
-    private readonly generationService: GenerativeService,
+    private readonly generationService: GenerationService,
   ) {}
   // Reusable action to capture data from a required fields and return it in a structured format.
   // Resolution of required fields is handled by the orchestration layer, which will coordinate pushbacks, etc.
@@ -53,9 +54,7 @@ export class CaptureDataAction {
       }
     }
 
-    const missingFields = requiredFields.filter(
-      (reqField) => !validFields.some((retrieved) => retrieved.key === reqField.key),
-    );
+    const missingFields = Utils.filterRequiredFields(requiredFields, validFields);
 
     return { retrieved: validFields, missing: missingFields };
   }

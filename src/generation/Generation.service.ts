@@ -11,7 +11,7 @@ import { ActionDecisionResponse, AgentDecisionResponse, ReplyRules } from './typ
 import { RequiredField, RetrievedField } from 'src/agent/types';
 
 @Injectable()
-export class GenerativeService {
+export class GenerationService {
   constructor(
     private readonly logger: ConsoleLogger,
     private readonly promptService: PromptService,
@@ -22,11 +22,14 @@ export class GenerativeService {
     client: ClientEntity,
     replyRules: ReplyRules,
     conversationHistory?: ConversationMessageEntity[],
+    promptOverride?: string,
   ) {
     const systemPrompt = this.promptService.getSystemPromptForClientResponse(client, replyRules);
     const history = this.promptService.formatConversationHistory(conversationHistory);
 
-    const prompt = `Given the following conversation, provide the client an appropiate response:${history}${client.events?.length ? '\n\n' + this.promptService.getClientEventsPrompt(client.events) : ''}`;
+    const prompt =
+      promptOverride ??
+      `Given the following conversation, provide the client an appropiate response:${history}${client.events?.length ? '\n\n' + this.promptService.getClientEventsPrompt(client.events) : ''}`;
 
     const generatedResponse = await this.model.sendToModel({
       prompt,
@@ -255,5 +258,49 @@ export class GenerativeService {
     });
 
     return generated;
+  }
+
+  async requestDataReply({
+    client,
+    replyRules,
+    conversationMessages,
+    requiredFields,
+    additionalContext,
+  }: {
+    client: ClientEntity;
+    replyRules: ReplyRules;
+    conversationMessages: ConversationMessageEntity[];
+    requiredFields: RequiredField[];
+    additionalContext?: string;
+  }) {
+    const systemPrompt = this.promptService.getRequestDataSystemPrompt(
+      client,
+      replyRules,
+      requiredFields,
+    );
+    const history = this.promptService.formatConversationHistory(conversationMessages);
+    const prompt = `Given the following conversation history: ${history}\n\nAnd the client context and reply rules: ${systemPrompt}\n\nCraft a response to the user that attempts to obtain the missing information needed to provide further assistance.${additionalContext ? `\n\nAdditionalContext: ${additionalContext}` : ''}`;
+
+    const generatedResponse = await this.model.sendToModel({
+      prompt,
+      systemPrompt,
+    });
+
+    return generatedResponse;
+  }
+
+  async generateConversationSummary(
+    conversationMessages: ConversationMessageEntity[],
+  ): Promise<string> {
+    const history = this.promptService.formatConversationHistory(conversationMessages);
+    const systemPrompt = `You are a community manager assistant that summarizes conversation histories. Given the conversation history, you provide concise summaries that capture the main points of conversation`;
+    const prompt = `Given the following conversation history: ${history}\n\nProvide a concise summary of the main points of this conversation. Maximum 200 characters.`;
+
+    const generatedSummary = await this.model.sendToModel({
+      prompt,
+      systemPrompt,
+    });
+
+    return generatedSummary;
   }
 }

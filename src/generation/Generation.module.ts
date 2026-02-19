@@ -1,15 +1,15 @@
 import { Module } from '@nestjs/common';
 import { PromptService } from './Prompt.service';
-import { GenerativeService } from './Generative.service';
+import { GenerationService } from './Generation.service';
 import { GenerationModel } from './models/model';
 import { GeminiModel } from './models/Gemini.model';
 
 @Module({
   providers: [
     PromptService,
-    GenerativeService,
+    GenerationService,
     { provide: GenerationModel, useClass: GeminiModel },
   ],
-  exports: [GenerativeService],
+  exports: [GenerationService],
 })
 export class GenerationModule {}

@@ -9,7 +9,7 @@ import {
 import { AgentService } from '../Agent.service';
 import { Utils } from 'src/utils';
 import { AgentActionType, Platform } from 'src/generated/prisma/enums';
-import { GenerativeService } from 'src/generation';
+import { GenerationService } from 'src/generation';
 import { ReplyAction } from '../actions/Reply.action';
 import { AlertAction } from '../actions/Alert.action';
 import { MessageWindowService } from 'src/messaging/MessageWindow.service';
@@ -27,7 +27,7 @@ export class CommunityManagerHandler {
   constructor(
     private readonly logger: ConsoleLogger,
     private readonly agentService: AgentService,
-    private readonly generationService: GenerativeService,
+    private readonly generationService: GenerationService,
     private readonly replyAction: ReplyAction,
     private readonly messageWindowService: MessageWindowService,
     private readonly conversationService: ConversationService,
@@ -37,15 +37,19 @@ export class CommunityManagerHandler {
   async handle({ client, conversation, agent, targetId }: CMHandlerContext) {
     const agentData = await this.agentService.getAgent(agent.agentId);
     const actions = await this.agentService.getActionsByAgentId(agentData.agentId);
-    const validActions = actions.filter(
-      (a) =>
-        a.isActive &&
-        this.agentService.checkAgentPolicies(
-          agentData,
-          conversation.platform,
-          conversation.channel,
-        ),
+    const canExecute = this.agentService.checkAgentPolicies(
+      agentData,
+      conversation.platform,
+      conversation.channel,
     );
+    if (!canExecute) {
+      this.logger.warn(
+        `Agent ${agentData.agentId} policies do not allow execution in conversation ${conversation.conversationId}`,
+      );
+      return;
+    }
+
+    const validActions = actions.filter((a) => a.isActive);
     if (!validActions.length) {
       this.logger.warn(`No active actions for agent ${agentData.agentId}`);
       return;

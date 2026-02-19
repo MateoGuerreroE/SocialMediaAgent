@@ -12,4 +12,11 @@ export class AgentSessionRepository {
       data: agentSession,
     });
   }
+
+  async updateAgentSession(sessionId: string, updates: Partial<AgentSessionEntity>): Promise<void> {
+    await this.prisma.agentSession.update({
+      where: { sessionId },
+      data: updates,
+    });
+  }
 }

@@ -11,6 +11,7 @@ import {
   ConversationMessageRepository,
   ConversationRepository,
   AgentRepository,
+  AgentSessionRepository,
 } from './repository';
 import { AgentLogRepository } from './repository/AgentLog.repository';
 
@@ -24,6 +25,7 @@ import { AgentLogRepository } from './repository/AgentLog.repository';
     AgentRepository,
     AgentActionRepository,
     AgentVariantRepository,
+    AgentSessionRepository,
     AgentPolicyRepository,
     AgentLogRepository,
     ConversationMessageRepository,
@@ -38,6 +40,7 @@ import { AgentLogRepository } from './repository/AgentLog.repository';
     AgentLogRepository,
     AgentActionRepository,
     AgentVariantRepository,
+    AgentSessionRepository,
     AgentPolicyRepository,
     ConversationMessageRepository,
     ClientEventRepository,

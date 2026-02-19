@@ -25,24 +25,39 @@ export class AgentService {
     private readonly agentSessionRepository: AgentSessionRepository,
   ) {}
 
+  async updateAgentSession(
+    sessionId: string,
+    updates: {
+      endedAt?: Date;
+      status?: AgentSessionStatus;
+      summary?: string;
+      state?: any;
+      result?: any;
+    },
+  ) {
+    return await this.agentSessionRepository.updateAgentSession(sessionId, updates);
+  }
+
   async createAgentSession({
     conversationId,
     agentId,
     agentKey,
+    state,
   }: {
     conversationId: string;
     agentId: string;
     agentKey: AgentKey;
+    state: any;
   }): Promise<AgentSessionEntity> {
     const sessionId = Utils.generateUUID();
     // TODO Each Session must have a init state defined by the agent config?
-    return this.agentSessionRepository.createAgentSession({
+    return await this.agentSessionRepository.createAgentSession({
       sessionId,
       agentId,
       agentKey,
       conversationId,
       status: AgentSessionStatus.STARTED,
-      state: {},
+      state,
     });
   }
 
@@ -59,7 +74,7 @@ export class AgentService {
     const agent = await this.agentRepository.getAgentById(agentId);
     if (!agent) throw new NotFoundError(`Agent with ID ${agentId} not found`);
 
-    this.agentCacheService.setAgent(agentId, agent);
+    await this.agentCacheService.setAgent(agentId, agent);
     return agent;
   }
 
@@ -74,7 +89,7 @@ export class AgentService {
     }
 
     const actions = await this.agentActionRepository.getAgentActionsByAgentId(agentId);
-    this.agentCacheService.setAgentActions(agentId, actions);
+    await this.agentCacheService.setAgentActions(agentId, actions);
     return actions;
   }
 

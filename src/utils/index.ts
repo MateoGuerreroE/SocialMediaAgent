@@ -3,6 +3,7 @@ import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import merge from 'deepmerge';
 import { CredentialType, Platform, PlatformChannel } from 'src/generated/prisma/enums';
+import { RequiredField, RetrievedField } from '../agent/types';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -33,7 +34,7 @@ export class Utils {
   }
 
   static mergeConfigurationOverrides<T, K extends Partial<T>>(configuration: T, override: K): T {
-    return merge(configuration, override) as T; // Check how useful is for us to have null removing original config values.
+    return merge(configuration, override); // Check how useful is for us to have null removing original config values.
   }
 
   static resolveRequiredCredential(platform: Platform, channel: PlatformChannel): CredentialType {
@@ -44,5 +45,12 @@ export class Utils {
     } else {
       return CredentialType.PAGE_ACCESS_TOKEN;
     }
+  }
+
+  static filterRequiredFields(
+    reqFields: RequiredField[],
+    receivedFields: RetrievedField[],
+  ): RequiredField[] {
+    return reqFields.filter((req) => !receivedFields.some((rec) => rec.key === req.key));
   }
 }
