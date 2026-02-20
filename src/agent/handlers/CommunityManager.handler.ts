@@ -45,7 +45,7 @@ export class CommunityManagerHandler {
     }
 
     Utils.mergeAgentConfigurations({
-      agent,
+      agent: agentData,
       channel: conversation.channel,
       platform: conversation.platform,
       logger: this.logger,
