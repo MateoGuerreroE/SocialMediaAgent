@@ -113,8 +113,6 @@ export class OrchestrationService {
       agent,
     };
 
-    this.logger.debug(`ROUTING PAYLOAD: ${JSON.stringify(payload, null, 2)}`);
-
     switch (agent.agentKey) {
       case 'COMMUNITY_MANAGER':
         await this.agentCommunityManagerQueue.add('handleEvent', payload, {
