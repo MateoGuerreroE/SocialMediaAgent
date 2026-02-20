@@ -87,6 +87,10 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    this.logger.debug(
+      `Clients with WhatsApp integrations found: ${clientsWithWhatsapp.map((c) => c.clientId).join(', ')}`,
+    );
+
     for (const client of clientsWithWhatsapp) {
       await this.attemptInitializeExistentClient(client);
     }
@@ -117,6 +121,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     }
 
     try {
+      this.logger.debug(`Attempting to initialize WhatsApp client for clientId ${client.clientId}`);
       await this.connect(client, whatsappCredential.value);
     } catch (e) {
       this.logger.error(
@@ -270,6 +275,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       });
       if (parsed) {
         this.logger.log(`Received whatsapp message`);
+        this.logger.debug(`Whatsapp message: ${JSON.stringify(parsed, null, 2)}`);
         await this.sendToOrchestration(parsed);
         return;
       }
