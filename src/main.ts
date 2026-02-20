@@ -27,8 +27,13 @@ async function bootstrap() {
     credentials: true,
   });
 
-  await app.listen(port);
-  Logger.log(`🚀 Application is running on port: ${port}`, 'Bootstrap');
+  await app.listen(port, '0.0.0.0');
+  // await app.listen(port);
+  Logger.log(
+    `🚀 Application is running on: http://0.0.0.0:${port}`,
+    // `🚀 Application is running on port: ${port}`,
+    'Bootstrap',
+  );
 }
 
 void bootstrap();
