@@ -164,6 +164,13 @@ export class OrchestrationService {
         agent.isActive &&
         this.agentService.checkAgentPolicies(agent, conversation.platform, conversation.channel),
     );
+
+    if (activeAgents.length === 0) {
+      throw new EarlyTerminationError(
+        `No active agents available for conversation ${conversation.conversationId}.`,
+      );
+    }
+
     if (activeAgents.length === 1) {
       this.logger.log(
         `Only one agent available (${activeAgents[0].agentKey}). Automatically selecting this agent.`,
