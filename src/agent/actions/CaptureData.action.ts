@@ -14,9 +14,11 @@ export class CaptureDataAction {
   // Resolution of required fields is handled by the orchestration layer, which will coordinate pushbacks, etc.
   async execute({
     requiredFields,
+    extractionContext,
     messages,
   }: {
     requiredFields: RequiredField[];
+    extractionContext?: string;
     messages: ConversationMessageEntity[];
   }): Promise<{ retrieved: RetrievedField[]; missing: RequiredField[] }> {
     if (requiredFields.length === 0) {
@@ -25,7 +27,11 @@ export class CaptureDataAction {
     }
 
     const retrievedFields: RetrievedField[] =
-      await this.generationService.extractFieldsFromResponse(requiredFields, messages);
+      await this.generationService.extractFieldsFromResponse(
+        requiredFields,
+        messages,
+        extractionContext,
+      );
 
     const validFields: RetrievedField[] = [];
     for (const field of retrievedFields) {

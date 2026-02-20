@@ -315,6 +315,7 @@ export class CrmIntegrationHandler {
     conversation: ConversationEntity;
     session: AgentSessionEntity;
   }): Promise<void> {
+    const confirmContext = action.configuration.confirmationContext;
     const initialRequiredField = action.configuration.confirmationRequiredFields;
     const capturedFields = session.state.confirmedFields;
 
@@ -352,6 +353,7 @@ export class CrmIntegrationHandler {
     }
     const { retrieved, missing } = await this.captureDataAction.execute({
       requiredFields: missingStartFields,
+      extractionContext: confirmContext,
       messages: conversation.messages,
     });
 
