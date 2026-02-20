@@ -179,7 +179,7 @@ export class OrchestrationService {
       return activeAgents[0];
     }
 
-    const logId = await this.agentLogRepository.createLog({
+    await this.agentLogRepository.createLog({
       logId: Utils.generateUUID(),
       agentId: selectedAgent.agentId,
       messageId,
