@@ -19,7 +19,7 @@ export class OrchestrationWorker extends WorkerHost {
     super();
   }
 
-  async process(job: Job<SocialMediaEvent>): Promise<any> {
+  async process(job: Job<SocialMediaEvent>): Promise<void> {
     return this.orchestrationService.orchestrateEvent(job.data);
   }
 

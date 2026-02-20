@@ -10,7 +10,7 @@ export class AgentSessionRepository {
   async createAgentSession(agentSession: CreateAgentSession): Promise<AgentSessionEntity> {
     return this.prisma.agentSession.create({
       data: agentSession,
-    });
+    }) as Promise<AgentSessionEntity>;
   }
 
   async updateAgentSession(sessionId: string, updates: Partial<AgentSessionEntity>): Promise<void> {
@@ -26,6 +26,6 @@ export class AgentSessionRepository {
         conversationId,
         agentId,
       },
-    });
+    }) as Promise<AgentSessionEntity | null>;
   }
 }

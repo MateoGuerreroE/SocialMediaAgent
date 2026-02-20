@@ -73,6 +73,13 @@ export class CommunityManagerHandler {
       `Model decision: Action ${chosenAction.actionType} with score ${actionDecision.decisionScore}. Reason: ${actionDecision.reason}`,
     );
 
+    Utils.mergeAgentConfigurations({
+      agent,
+      channel: conversation.channel,
+      platform: conversation.platform,
+      logger: this.logger,
+    });
+
     await this.handleActionExecution({
       action: chosenAction,
       client,
@@ -99,27 +106,6 @@ export class CommunityManagerHandler {
     action: AgentActionEntity;
     actions?: AgentActionEntity[];
   }) {
-    const variants = agent.variants || [];
-    if (variants.length) {
-      const matchVariant = variants.find(
-        (v) =>
-          (v.platform === null || v.platform === conversation.platform) &&
-          (v.channel === null || v.channel === conversation.channel),
-      );
-
-      if (matchVariant && matchVariant.isActive) {
-        this.logger.log(
-          `Found matching variant ${matchVariant.variantId} for action ${action.actionId}`,
-        );
-        // In case variant overrides any of the agent configurations
-        if (matchVariant.overrideConfiguration)
-          agent.configuration = Utils.mergeConfigurationOverrides(
-            agent.configuration,
-            matchVariant.overrideConfiguration,
-          );
-      }
-    }
-
     const credential = client.credentials?.find(
       (c) =>
         c.type === Utils.resolveRequiredCredential(conversation.platform, conversation.channel),
@@ -153,7 +139,7 @@ export class CommunityManagerHandler {
         });
         break;
       case AgentActionType.ESCALATE:
-        await this.handleEscalate({ conversation, client, reason, actions, targetId });
+        await this.handleEscalate({ conversation, client, reason, actions, targetId, agent });
         break;
       default:
         this.logger.warn(`Unknown action type ${action.actionType} for action ${action.actionId}`);
@@ -177,14 +163,15 @@ export class CommunityManagerHandler {
   }) {
     const agentConfig = agent.configuration;
 
-    const generatedResponse = await this.generationService.generateResponseWithClientContext(
+    const generatedResponse = await this.generationService.generateResponseWithClientContext({
       client,
-      agentConfig.replyRules,
-      conversation.messages,
-      routingContext
+      configuration: agentConfig,
+      agentName: agent.name,
+      conversationHistory: conversation.messages,
+      promptOverride: routingContext
         ? `You have been routed from another agent with the following context: ${routingContext}.\nGiven the following conversation, and the context for routing, provide the client an appropiate response:`
         : undefined,
-    );
+    });
 
     await this.replyAction.execute({
       message: generatedResponse,
@@ -238,6 +225,7 @@ export class CommunityManagerHandler {
 
       const generatedAlert = await this.generationService.generateAlertMessage(
         reason,
+        agent.configuration.modelTier,
         conversation.messages,
       );
 
@@ -273,11 +261,13 @@ export class CommunityManagerHandler {
     conversation,
     client,
     reason,
+    agent,
     actions,
     targetId,
   }: {
     conversation: ConversationEntity;
     client: ClientEntity;
+    agent: AgentEntity;
     targetId: string;
     reason?: string;
     actions?: AgentActionEntity[];
@@ -315,6 +305,7 @@ export class CommunityManagerHandler {
 
         const generatedReply = await this.generationService.generateEscalationMessage(
           reason,
+          agent.configuration.modelTier,
           conversation.messages,
         );
 

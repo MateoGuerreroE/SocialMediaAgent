@@ -9,6 +9,7 @@ import {
   Platform,
   PlatformChannel,
 } from '../generated/prisma/enums';
+import { AgentConfigOverride, AgentConfiguration } from './nested';
 
 export interface ClientEntity {
   clientId: string;
@@ -95,8 +96,7 @@ export interface AgentEntity {
   name: string;
   useCase: string;
   isActive: boolean;
-  configuration: any; // TODO TYPE THIS!! -> Examples, tone, general model rules, general retry rules, etc.
-  createdAt: Date;
+  configuration: AgentConfiguration;
   updatedAt: Date;
 
   variants?: AgentVariantEntity[];
@@ -132,7 +132,7 @@ export interface AgentVariantEntity {
   agentId: string;
   platform: Platform | null;
   channel: PlatformChannel | null;
-  overrideConfiguration: any; // TODO TYPE THIS!! -> Depends on the action, for example for an alert action it would be the alert channel, the target, etc.
+  overrideConfiguration: AgentConfigOverride;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;

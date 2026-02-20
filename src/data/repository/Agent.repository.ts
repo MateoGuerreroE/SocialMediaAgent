@@ -15,7 +15,7 @@ export class AgentRepository {
       include: {
         variants: true,
       },
-    });
+    }) as Promise<AgentEntity | null>;
   }
 
   async getAgentsByClientId(clientId: string): Promise<AgentEntity[]> {
@@ -23,7 +23,7 @@ export class AgentRepository {
       where: {
         clientId: clientId,
       },
-    });
+    }) as unknown as Promise<AgentEntity[]>;
   }
 
   async getClientAgentByKey(clientId: string, key: AgentKey): Promise<AgentEntity | null> {
@@ -35,6 +35,6 @@ export class AgentRepository {
       include: {
         variants: true,
       },
-    });
+    }) as Promise<AgentEntity | null>;
   }
 }

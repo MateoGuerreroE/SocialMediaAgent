@@ -37,10 +37,14 @@ export class PromptService {
     return `\n\nCurrent conversation (newest first):\n${formattedMessages}\n---- END of conversation history ----`;
   }
 
-  getSystemPromptForClientResponse(client: ClientEntity, replyRules: ReplyRules): string {
+  getSystemPromptForClientResponse(
+    client: ClientEntity,
+    replyRules: ReplyRules,
+    agentName: string,
+  ): string {
     const clientContext = this.getClientContext(client);
     const replyRulesContext = this.getReplyRules(replyRules);
-    const systemPrompt = `${GENERATION_CONSTANTS.AGENT_CLIENT_RESPONSE}\n\nClient context:\n${clientContext}\n\nReply rules:\n${replyRulesContext}`;
+    const systemPrompt = `Your name is: ${agentName}\n${GENERATION_CONSTANTS.AGENT_CLIENT_RESPONSE}\n\nClient context:\n${clientContext}\n\nReply rules:\n${replyRulesContext}`;
 
     return systemPrompt;
   }
@@ -97,7 +101,7 @@ export class PromptService {
         "intention": "${rules.intention}",
         "emojiUsage": "${rules.emojiUsage}",
         "avoidTopics": ${rules.avoidTopics ? JSON.stringify(rules.avoidTopics) : 'null'},
-        "onAvoidedTopics": "${rules.onAvoidedTopics ?? ''}",
+        "onAvoidedOrMissingInfo": "${rules.onAvoidedTopics ?? ''}",
         "onEmptyMessage": "${rules.onEmptyMessage ?? ''}",
         "onProfanity": "${rules.profanity ?? 'none'}"
       }
@@ -207,6 +211,7 @@ ${formattedEvents}
 
   getRequestDataSystemPrompt(
     client: ClientEntity,
+    agentName: string,
     replyRules: ReplyRules,
     requiredFields: RequiredField[],
   ): string {
@@ -214,6 +219,6 @@ ${formattedEvents}
     const rules = this.getReplyRules(replyRules);
     const requiredFieldsFormat = this.getRequiredFieldsFormat(requiredFields);
 
-    return `${GENERATION_CONSTANTS.AGENT_DATA_REQUEST}\n\n${clientContext}\n\n${rules}\n\nREQUIRED_FIELDS:\n${requiredFieldsFormat}`;
+    return `Your name is: ${agentName}\n${GENERATION_CONSTANTS.AGENT_DATA_REQUEST}\n\n${clientContext}\n\n${rules}\n\nREQUIRED_FIELDS:\n${requiredFieldsFormat}`;
   }
 }

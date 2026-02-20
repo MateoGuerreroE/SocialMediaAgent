@@ -23,7 +23,7 @@ export class ClientRepository {
           },
         },
       },
-    });
+    }) as Promise<ClientEntity | null>;
   }
 
   async createClient(clientData: CreateClient): Promise<ClientEntity> {
@@ -59,7 +59,7 @@ export class ClientRepository {
         events: includeRelations,
         credentials: includeRelations,
       },
-    });
+    }) as Promise<ClientEntity | null>;
   }
 
   async getClientsWithWhatsappNumber(): Promise<ClientEntity[]> {

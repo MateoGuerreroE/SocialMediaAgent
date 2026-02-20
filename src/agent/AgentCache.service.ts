@@ -1,7 +1,7 @@
 import { ConsoleLogger, Injectable } from '@nestjs/common';
 import { RedisService } from 'src/data';
 import { AgentKey } from 'src/generated/prisma/enums';
-import { AgentActionEntity } from 'src/types/entities';
+import { AgentActionEntity, AgentEntity } from 'src/types/entities';
 
 @Injectable()
 export class AgentCacheService {
@@ -28,7 +28,7 @@ export class AgentCacheService {
     }
   }
 
-  async setAgent(agentId: string, agentData: any): Promise<void> {
+  async setAgent(agentId: string, agentData: AgentEntity): Promise<void> {
     try {
       const key = this.buildAgentKey(agentId);
       await this.redis.setex(key, this.AGENT_TTL, JSON.stringify(agentData));

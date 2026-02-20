@@ -71,6 +71,13 @@ export class CrmIntegrationHandler {
     const validAgent = await this.agentService.getAgent(agent.agentId);
     const actions = await this.agentService.getActionsByAgentId(validAgent.agentId);
 
+    Utils.mergeAgentConfigurations({
+      agent: validAgent,
+      channel: conversation.channel,
+      platform: conversation.platform,
+      logger: this.logger,
+    });
+
     // Validate all prerequisites
     if (!this.validateRequiredActions(actions)) return;
     const requiredActions = this.resolveRequiredActions(actions);
@@ -83,7 +90,10 @@ export class CrmIntegrationHandler {
     );
 
     if (existingSession) {
-      if (existingSession.status === AgentSessionStatus.COMPLETED) {
+      if (
+        existingSession.status === AgentSessionStatus.COMPLETED ||
+        existingSession.status === AgentSessionStatus.FAILED
+      ) {
         this.logger.log(
           `Existing completed session found for conversation ${conversation.conversationId}. Handling accordingly.`,
         );
@@ -319,7 +329,8 @@ export class CrmIntegrationHandler {
     if (session.status === AgentSessionStatus.STARTED) {
       const requestMessage = await this.generationService.requestDataReply({
         client,
-        replyRules: agent.configuration.replyRules,
+        configuration: agent.configuration,
+        agentName: agent.name,
         conversationMessages: conversation.messages,
         requiredFields: missingStartFields,
         additionalContext: `This is the initial message for confirming required fields. This means the client was just redirected to the CRM capture flow`,
@@ -349,7 +360,8 @@ export class CrmIntegrationHandler {
         client,
         conversationMessages: conversation.messages,
         requiredFields: missing,
-        replyRules: agent.configuration.replyRules,
+        configuration: agent.configuration,
+        agentName: agent.name,
       });
 
       await this.sendAndLogMessage({
@@ -426,8 +438,9 @@ export class CrmIntegrationHandler {
     if (isInitial) {
       const requestMessage = await this.generationService.requestDataReply({
         client,
-        replyRules: agent.configuration.replyRules,
+        configuration: agent.configuration,
         conversationMessages: conversation.messages,
+        agentName: agent.name,
         requiredFields: initialRequiredFields,
         additionalContext: `This is the initial message for requesting this fields. Acknowledge the received information and request all the required fields`,
       });
@@ -453,9 +466,10 @@ export class CrmIntegrationHandler {
     if (missing.length > 0) {
       const generatedRequirement = await this.generationService.requestDataReply({
         client,
+        configuration: agent.configuration,
         conversationMessages: conversation.messages,
         requiredFields: missing,
-        replyRules: agent.configuration.replyRules,
+        agentName: agent.name,
       });
 
       await this.sendAndLogMessage({
@@ -572,6 +586,7 @@ export class CrmIntegrationHandler {
 
       const generatedAlert = await this.generationService.generateAlertMessage(
         'Client contacted and started CRM flow, but failed to save data. Probably client is already there or the system is not available.',
+        agent.configuration.modelTier,
         messages,
       );
 
@@ -599,12 +614,14 @@ export class CrmIntegrationHandler {
       });
 
       // TODO IMPLEMENT ALERT ON SUCCESS TOO :)
-      const generatedFailedReply = await this.generationService.generateResponseWithClientContext(
+      const generatedFailedReply = await this.generationService.generateResponseWithClientContext({
         client,
-        agent.configuration.replyRules,
-        conversation.messages,
-        'You were attempting to save client information to CRM but was not able to do It. Reply to the customer apologizing for the inconvenience and let them know that probably they already exist in the system and that the person in charge has been alerted to check the issue.',
-      );
+        configuration: agent.configuration,
+        agentName: agent.name,
+        conversationHistory: conversation.messages,
+        promptOverride:
+          'You were attempting to save client information to CRM but was not able to do It. Reply to the customer apologizing for the inconvenience and let them know that probably they already exist in the system and that the person in charge has been alerted to check the issue.',
+      });
 
       await this.sendAndLogMessage({
         message: generatedFailedReply,
@@ -654,12 +671,14 @@ export class CrmIntegrationHandler {
     credential: ClientCredentialEntity;
     client: ClientEntity;
   }) {
-    const generatedReply = await this.generationService.generateResponseWithClientContext(
+    const generatedReply = await this.generationService.generateResponseWithClientContext({
       client,
-      agent.configuration.replyRules,
-      conversation.messages,
-      'You have just received several data fields from the client. Create a reply acknowledging the receipt of the information and let them know that the process is complete, and that someone will contact them soon regarding the next steps.',
-    );
+      configuration: agent.configuration,
+      agentName: agent.name,
+      conversationHistory: conversation.messages,
+      promptOverride:
+        'You have just received several data fields from the client. Create a reply acknowledging the receipt of the information and let them know that the process is complete, and that someone will contact them soon regarding the next steps.',
+    });
 
     await this.sendAndLogMessage({
       message: generatedReply,
@@ -689,12 +708,14 @@ export class CrmIntegrationHandler {
     notificationService: AgentActionEntity;
     agent: AgentEntity;
   }): Promise<void> {
-    const generatedReply = await this.generationService.generateResponseWithClientContext(
+    const generatedReply = await this.generationService.generateResponseWithClientContext({
       client,
-      agent.configuration.replyRules,
-      messages,
-      'The client has returned to the CRM flow but there is already a session completed. With the conversation history context for that session, reply letting the customer know that their information has already been received and that the right team has been alerted again and user be contacted soon regarding the next steps.',
-    );
+      configuration: agent.configuration,
+      agentName: agent.name,
+      conversationHistory: messages,
+      promptOverride:
+        'The client has returned to the CRM flow but there is already a session completed. With the conversation history context for that session, reply letting the customer know that their information has already been received and that the right team has been alerted again and user be contacted soon regarding the next steps.',
+    });
 
     await this.sendAndLogMessage({
       message: generatedReply,
@@ -706,6 +727,7 @@ export class CrmIntegrationHandler {
 
     const alertMessage = await this.generationService.generateAlertMessage(
       'Client has returned to the CRM flow but there is already a session completed. Alerting the team again with the conversation history context for that session, so they can check the case again and contact the client if needed.',
+      agent.configuration.modelTier,
       messages,
     );
 

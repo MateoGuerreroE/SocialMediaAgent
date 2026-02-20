@@ -4,7 +4,9 @@ import timezone from 'dayjs/plugin/timezone';
 import merge from 'deepmerge';
 import { CredentialType, Platform, PlatformChannel } from 'src/generated/prisma/enums';
 import { RequiredField, RetrievedField } from '../agent/types';
-import { ClientEntity } from 'src/types/entities';
+import { AgentEntity, ClientEntity } from 'src/types/entities';
+import { AgentConfigOverride } from 'src/types/nested';
+import { ConsoleLogger } from '@nestjs/common';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -34,8 +36,37 @@ export class Utils {
     return `${diffDays} days ago at ${target.format('h:mm A')}`;
   }
 
-  static mergeConfigurationOverrides<T, K extends Partial<T>>(configuration: T, override: K): T {
-    return merge(configuration, override); // Check how useful is for us to have null removing original config values.
+  static mergeAgentConfigurations({
+    agent,
+    channel,
+    platform,
+    logger,
+  }: {
+    agent: AgentEntity;
+    channel: PlatformChannel;
+    platform: Platform;
+    logger: ConsoleLogger;
+  }): void {
+    const variants = agent.variants || [];
+    if (variants.length) {
+      const originalConfig = agent.configuration || {};
+      const matchVariant = variants.find(
+        (v) =>
+          (v.platform === null || v.platform === platform) &&
+          (v.channel === null || v.channel === channel),
+      );
+
+      if (matchVariant && matchVariant.isActive) {
+        logger.log(
+          `Found matching variant ${matchVariant.variantId} for agent ${agent.agentId}. Merging configurations.`,
+        );
+        // In case variant overrides any of the agent configurations
+        if (matchVariant.overrideConfiguration)
+          agent.configuration = merge(originalConfig, matchVariant.overrideConfiguration, {
+            arrayMerge: (_, sourceArray) => sourceArray, // Override arrays instead of merging
+          });
+      }
+    }
   }
 
   static resolveRequiredCredential(platform: Platform, channel: PlatformChannel): CredentialType {

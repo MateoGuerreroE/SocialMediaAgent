@@ -10,6 +10,7 @@ import { PromptService } from './Prompt.service';
 import { ActionDecisionResponse, AgentDecisionResponse, ReplyRules } from './types';
 import { RequiredField, RetrievedField } from 'src/agent/types';
 import { Utils } from 'src/utils';
+import { AgentConfiguration } from 'src/types/nested';
 
 @Injectable()
 export class GenerationService {
@@ -19,21 +20,33 @@ export class GenerationService {
     private readonly model: GenerationModel,
   ) {}
 
-  async generateResponseWithClientContext(
-    client: ClientEntity,
-    replyRules: ReplyRules,
-    conversationHistory?: ConversationMessageEntity[],
-    promptOverride?: string,
-    includeEvents = true,
-  ) {
-    const systemPrompt = this.promptService.getSystemPromptForClientResponse(client, replyRules);
+  async generateResponseWithClientContext({
+    client,
+    configuration,
+    agentName,
+    conversationHistory,
+    promptOverride,
+  }: {
+    client: ClientEntity;
+    configuration: AgentConfiguration;
+    agentName: string;
+    conversationHistory?: ConversationMessageEntity[];
+    promptOverride?: string;
+  }) {
+    const { replyRules, modelTier } = configuration;
+    const systemPrompt = this.promptService.getSystemPromptForClientResponse(
+      client,
+      replyRules,
+      agentName,
+    );
     const history = this.promptService.formatConversationHistory(conversationHistory);
 
-    const prompt = `${promptOverride ?? 'Given the following conversation, provide the client an appropiate response:'}${history}${client.events?.length && includeEvents ? '\n\n' + this.promptService.getClientEventsPrompt(client.events) : ''}`;
+    const prompt = `${promptOverride ?? 'Given the following conversation, provide the client an appropiate response:'}${history}${client.events?.length ? '\n\n' + this.promptService.getClientEventsPrompt(client.events) : ''}`;
 
     const generatedResponse = await this.model.sendToModel({
       prompt,
       systemPrompt,
+      modelTier,
     });
 
     return generatedResponse;
@@ -76,6 +89,7 @@ export class GenerationService {
 
   async generateAlertMessage(
     reason: string,
+    modelTier: number,
     conversationMessages?: ConversationMessageEntity[],
   ): Promise<string> {
     const history = this.promptService.formatConversationHistory(conversationMessages);
@@ -85,6 +99,7 @@ export class GenerationService {
     const generatedMessage = await this.model.sendToModel({
       prompt,
       systemPrompt,
+      modelTier,
     });
 
     return generatedMessage;
@@ -131,6 +146,7 @@ export class GenerationService {
 
   async generateEscalationMessage(
     reason: string,
+    modelTier: number,
     conversationMessages?: ConversationMessageEntity[],
   ): Promise<string> {
     const history = this.promptService.formatConversationHistory(conversationMessages);
@@ -140,6 +156,7 @@ export class GenerationService {
     const generatedMessage = await this.model.sendToModel({
       prompt,
       systemPrompt,
+      modelTier,
     });
 
     return generatedMessage;
@@ -188,19 +205,23 @@ export class GenerationService {
 
   async requestDataReply({
     client,
-    replyRules,
+    configuration,
     conversationMessages,
     requiredFields,
     additionalContext,
+    agentName,
   }: {
     client: ClientEntity;
-    replyRules: ReplyRules;
+    configuration: AgentConfiguration;
     conversationMessages: ConversationMessageEntity[];
     requiredFields: RequiredField[];
     additionalContext?: string;
+    agentName: string;
   }) {
+    const { replyRules, modelTier } = configuration;
     const systemPrompt = this.promptService.getRequestDataSystemPrompt(
       client,
+      agentName,
       replyRules,
       requiredFields,
     );
@@ -210,6 +231,7 @@ export class GenerationService {
     const generatedResponse = await this.model.sendToModel({
       prompt,
       systemPrompt,
+      modelTier,
     });
 
     return generatedResponse;
