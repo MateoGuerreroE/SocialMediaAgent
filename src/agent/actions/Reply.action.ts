@@ -3,6 +3,7 @@ import { CredentialType, Platform, PlatformChannel } from 'src/generated/prisma/
 import { WhatsappService } from 'src/ingress/Whatsapp.service';
 import { ClientCredentialEntity } from 'src/types/entities';
 import { ConflictError } from 'src/types/errors';
+import { Utils } from '../../utils';
 
 @Injectable()
 export class ReplyAction {
@@ -25,6 +26,7 @@ export class ReplyAction {
     credential: ClientCredentialEntity;
   }) {
     let result: string | null = null;
+    await Utils.sleep(Math.min(message.length * 25, 5000)); // Simulate typing time, max 5 seconds
     switch (platform) {
       case Platform.WHATSAPP:
         if (channel !== PlatformChannel.DIRECT_MESSAGE) {
