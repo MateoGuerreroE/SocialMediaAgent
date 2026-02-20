@@ -43,6 +43,8 @@ export class GenerationService {
 
     const prompt = `${promptOverride ?? 'Given the following conversation, provide the client an appropiate response:'}${history}${client.events?.length ? '\n\n' + this.promptService.getClientEventsPrompt(client.events) : ''}`;
 
+    this.logger.debug(`System prompt: ${systemPrompt}`);
+    this.logger.debug(`User prompt: ${prompt}`);
     const generatedResponse = await this.model.sendToModel({
       prompt,
       systemPrompt,
@@ -228,6 +230,8 @@ export class GenerationService {
     const history = this.promptService.formatConversationHistory(conversationMessages);
     const prompt = `Given the following conversation history: ${history}\n\nAnd the client context and reply rules: ${systemPrompt}\n\nCraft a response to the user that attempts to obtain the missing information needed to provide further assistance.${additionalContext ? `\n\nAdditionalContext: ${additionalContext}` : ''}`;
 
+    this.logger.debug(`System prompt: ${systemPrompt}`);
+    this.logger.debug(`User prompt: ${prompt}`);
     const generatedResponse = await this.model.sendToModel({
       prompt,
       systemPrompt,

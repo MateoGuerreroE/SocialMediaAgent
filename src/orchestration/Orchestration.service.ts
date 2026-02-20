@@ -113,6 +113,8 @@ export class OrchestrationService {
       agent,
     };
 
+    this.logger.debug(`ROUTING PAYLOAD: ${JSON.stringify(payload, null, 2)}`);
+
     switch (agent.agentKey) {
       case 'COMMUNITY_MANAGER':
         await this.agentCommunityManagerQueue.add('handleEvent', payload, {
@@ -322,7 +324,7 @@ export class OrchestrationService {
     }
 
     this.logger.log(`Opening response window for conversation ${conversationId}`);
-    await Utils.sleep(isStateful ? 15000 : 8000);
+    await Utils.sleep(isStateful ? 20000 : 12000);
 
     const wasExtended = await this.messageWindowService.wasWindowExtended(conversationId);
     if (wasExtended) {

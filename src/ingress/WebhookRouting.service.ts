@@ -25,7 +25,6 @@ export class WebhookRoutingService {
 
   async routeInstagramEvent(event: InstagramEvent): Promise<void> {
     this.logger.log(`Received Instagram event for account ${event.id}`);
-    this.logger.debug(`Event details: ${JSON.stringify(event, null, 2)}`);
     try {
       const parsedEvent = this.parseInstagramEvent(event);
       if (!parsedEvent) {
@@ -36,21 +35,17 @@ export class WebhookRoutingService {
         `Routing event for channel ${parsedEvent.channel} and platform: ${parsedEvent.platform}`,
       );
 
-      this.logger.debug(`Parsed details: ${JSON.stringify(parsedEvent, null, 2)}`);
-
       await this.sendToOrchestrationQueue(parsedEvent);
     } catch (e) {
-      this.logger.error(
-        `Error parsing Instagram event: ${e instanceof Error ? e.message : String(e)}`,
+      this.logger.warn(
+        `Failed to parse Instagram event ${JSON.stringify(event, null, 2)}: ${e instanceof Error ? e.message : String(e)}`,
       );
-      this.logger.warn(`Failed to parse Instagram event ${JSON.stringify(event, null, 2)}`);
       return;
     }
   }
 
   async routeFacebookEvent(event: FacebookEvent) {
     this.logger.log(`Received Facebook event for account ${event.id}`);
-    this.logger.debug(`Event details: ${JSON.stringify(event, null, 2)}`);
 
     try {
       const parsedEvent = this.parseFacebookEvent(event);
@@ -59,18 +54,15 @@ export class WebhookRoutingService {
         return;
       }
 
-      this.logger.debug(`Parsed details: ${JSON.stringify(parsedEvent, null, 2)}`);
-
       this.logger.debug(
         `Routing event for channel ${parsedEvent.channel} and platform: ${parsedEvent.platform}`,
       );
 
       await this.sendToOrchestrationQueue(parsedEvent);
     } catch (e) {
-      this.logger.error(
-        `Error parsing Facebook event: ${e instanceof Error ? e.message : String(e)}`,
+      this.logger.warn(
+        `Failed to parse Facebook event ${JSON.stringify(event, null, 2)}: ${e instanceof Error ? e.message : String(e)}`,
       );
-      this.logger.warn(`Failed to parse Facebook event ${JSON.stringify(event, null, 2)}`);
       return;
     }
   }

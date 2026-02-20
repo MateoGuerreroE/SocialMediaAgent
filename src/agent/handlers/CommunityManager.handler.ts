@@ -44,6 +44,13 @@ export class CommunityManagerHandler {
       return;
     }
 
+    Utils.mergeAgentConfigurations({
+      agent,
+      channel: conversation.channel,
+      platform: conversation.platform,
+      logger: this.logger,
+    });
+
     if (validActions.length === 1) {
       this.logger.log(
         `Single valid action ${validActions[0].actionId} for agent ${agentData.agentId}, executing directly`,
@@ -74,13 +81,6 @@ export class CommunityManagerHandler {
     this.logger.debug(
       `Model decision: Action ${chosenAction.actionType} with score ${actionDecision.decisionScore}. Reason: ${actionDecision.reason}`,
     );
-
-    Utils.mergeAgentConfigurations({
-      agent,
-      channel: conversation.channel,
-      platform: conversation.platform,
-      logger: this.logger,
-    });
 
     await this.handleActionExecution({
       action: chosenAction,
