@@ -440,8 +440,17 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       return null;
     }
 
+    this.logger.debug(
+      `Mapping WhatsApp message to SocialMediaEvent: ${JSON.stringify(msg, null, 2)}`,
+    );
+
     const phoneOrId = targetId.split('@')[0];
     const messageId = Utils.generateUUID();
+
+    if (msg.isGroupHistoryMessage) {
+      this.logger.warn('Received group message, which is currently not supported. Skipping.');
+      return null;
+    }
 
     const isDeleted =
       msg.message?.protocolMessage?.type === proto.Message.ProtocolMessage.Type.REVOKE;
