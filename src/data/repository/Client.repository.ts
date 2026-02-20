@@ -13,6 +13,7 @@ export class ClientRepository {
       where: {
         ...(platform === Platform.INSTAGRAM && { instagramAccountId: accountId }),
         ...(platform === Platform.FACEBOOK && { facebookAccountId: accountId }),
+        ...(platform === Platform.WHATSAPP && { whatsappNumber: accountId }),
       },
       include: {
         events: true,
