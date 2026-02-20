@@ -55,6 +55,7 @@ export class CommunityManagerHandler {
         agent: agentData,
         targetId,
       });
+      return;
     }
 
     const actionDecision = await this.generationService.requestActionDecision(
