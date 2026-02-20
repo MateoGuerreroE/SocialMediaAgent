@@ -25,6 +25,7 @@ export class WebhookRoutingService {
 
   async routeInstagramEvent(event: InstagramEvent): Promise<void> {
     this.logger.log(`Received Instagram event for account ${event.id}`);
+    this.logger.debug(`Event details: ${JSON.stringify(event, null, 2)}`);
     try {
       const parsedEvent = this.parseInstagramEvent(event);
       if (!parsedEvent) {
@@ -34,6 +35,8 @@ export class WebhookRoutingService {
       this.logger.debug(
         `Routing event for channel ${parsedEvent.channel} and platform: ${parsedEvent.platform}`,
       );
+
+      this.logger.debug(`Parsed details: ${JSON.stringify(parsedEvent, null, 2)}`);
 
       await this.sendToOrchestrationQueue(parsedEvent);
     } catch (e) {
@@ -47,12 +50,16 @@ export class WebhookRoutingService {
 
   async routeFacebookEvent(event: FacebookEvent) {
     this.logger.log(`Received Facebook event for account ${event.id}`);
+    this.logger.debug(`Event details: ${JSON.stringify(event, null, 2)}`);
+
     try {
       const parsedEvent = this.parseFacebookEvent(event);
       if (!parsedEvent) {
         this.logger.warn(`Unsupported Facebook event ${JSON.stringify(event, null, 2)}`);
         return;
       }
+
+      this.logger.debug(`Parsed details: ${JSON.stringify(parsedEvent, null, 2)}`);
 
       this.logger.debug(
         `Routing event for channel ${parsedEvent.channel} and platform: ${parsedEvent.platform}`,

@@ -5,6 +5,7 @@ import {
   ClientCredentialEntity,
   ClientEntity,
   ConversationEntity,
+  ConversationMessageEntity,
 } from 'src/types/entities';
 import { AgentService } from '../Agent.service';
 import { Utils } from 'src/utils';
