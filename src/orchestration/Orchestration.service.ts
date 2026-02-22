@@ -103,8 +103,9 @@ export class OrchestrationService {
 
           return;
         } else if (conversation.isConfirmed === false) {
-          this.logger.warn(`
-            Conversation ${conversation.conversationId} has been flagged as not confirmed. Skipping processing.`);
+          this.logger.warn(
+            `Conversation ${conversation.conversationId} has been flagged as not confirmed. Skipping processing.`,
+          );
           return;
         }
       }

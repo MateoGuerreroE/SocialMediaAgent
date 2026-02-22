@@ -28,14 +28,11 @@ export class ConfirmationAssistantHandler {
     };
 
     const lastMessage = conversation.messages[0];
-    this.logger.debug(`Last message for confirmation: ${JSON.stringify(lastMessage, null, 2)}`);
     const extractedInfo = await this.generationService.extractFieldsFromResponse(
       [requiredField],
-      [lastMessage], // Only look at the most recent message for confirmation
+      conversation.messages.slice(0, 2), // Only look at the last 2 messages for confirmation
       `You are confirming the response to the following question: ${confirmationQuestion}. Extract whether the user has confirmed (yes), denied (no), or if the response is unrelated to the confirmation question.`,
     );
-
-    this.logger.debug(`Extracted confirmation info: ${JSON.stringify(extractedInfo, null, 2)}`);
 
     if (!extractedInfo || extractedInfo.length === 0) {
       this.logger.error(
@@ -52,25 +49,7 @@ export class ConfirmationAssistantHandler {
 
     switch (extractedValue.value.toLowerCase()) {
       case 'yes': {
-        const reply = await this.generationService.simpleGenerate(
-          `You just received confirmation, and internally next messages would be redirected to the proper agent. Based on last user response, generate a acknowledgement of the received information and ask politely what can you help the user with\nLast message: ${lastMessage.content}`,
-        );
-
-        await this.replyAction.execute({
-          platform: conversation.platform,
-          target: targetId,
-          credential,
-          channel: conversation.channel,
-          message: reply,
-        });
-
-        await this.conversationService.addAgentMessage(conversation, 'confirmation_agent', reply);
-
-        await this.conversationService.confirmConversation(conversation.conversationId, true);
-        break;
-      }
-      case 'no': {
-        this.logger.log(`User denied the confirmation, flagging conversation`);
+        this.logger.log(`User provided confirmation, flagging conversation`);
         const generatedMessage = await this.generationService.simpleGenerate(
           `Acknowledge the last response from user and let them know that someone would be in touch on this conversation shortly. Last message: ${lastMessage.content}`,
         );
@@ -90,6 +69,24 @@ export class ConfirmationAssistantHandler {
         );
 
         await this.conversationService.confirmConversation(conversation.conversationId, false);
+        break;
+      }
+      case 'no': {
+        const reply = await this.generationService.simpleGenerate(
+          `You just received confirmation, and internally next messages would be redirected to the proper agent. Based on last user response, generate a acknowledgement of the received information and ask politely what can you help the user with\nLast message: ${lastMessage.content}`,
+        );
+
+        await this.replyAction.execute({
+          platform: conversation.platform,
+          target: targetId,
+          credential,
+          channel: conversation.channel,
+          message: reply,
+        });
+
+        await this.conversationService.addAgentMessage(conversation, 'confirmation_agent', reply);
+
+        await this.conversationService.confirmConversation(conversation.conversationId, true);
         break;
       }
       case 'unrelated': {
