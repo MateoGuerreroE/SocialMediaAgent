@@ -17,7 +17,7 @@ import { Queue } from 'bullmq';
 import { ClientService } from 'src/client';
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { ConfigService } from '@nestjs/config';
-import { ClientEntity } from 'src/types/entities';
+import { ClientPlatformEntity, PlatformCredentialEntity } from 'src/types/entities';
 import {
   CredentialType,
   MessageSource,
@@ -27,6 +27,7 @@ import {
 } from 'src/generated/prisma/enums';
 import { SocialMediaEvent } from 'src/types/messages';
 import { Utils } from 'src/utils';
+import { NotFoundError } from '../types/errors';
 
 @Injectable()
 export class WhatsappService implements OnModuleInit, OnModuleDestroy {
@@ -81,51 +82,46 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit() {
-    const clientsWithWhatsapp = await this.clientService.getClientsWithActiveWhatsappIntegrations();
-    if (clientsWithWhatsapp.length === 0) {
+    const whatsappPlatforms = await this.clientService.getAllClientWhatsappPlatforms();
+    if (whatsappPlatforms.length === 0) {
       this.logger.warn('No clients with active WhatsApp integrations found on startup.');
       return;
     }
 
     this.logger.debug(
-      `Clients with WhatsApp integrations found: ${clientsWithWhatsapp.map((c) => c.clientId).join(', ')}`,
+      `Clients with WhatsApp integrations found: ${whatsappPlatforms.map((p) => p.clientId).join(', ')}`,
     );
 
-    for (const client of clientsWithWhatsapp) {
-      await this.attemptInitializeExistentClient(client);
+    for (const platform of whatsappPlatforms) {
+      await this.attemptInitializeExistentClient(platform);
     }
   }
 
-  private async attemptInitializeExistentClient(client: ClientEntity) {
-    if (this.sockets.has(client.clientId)) {
-      this.logger.warn(`Client ${client.clientId} already initialized, skipping.`);
+  private async attemptInitializeExistentClient(platform: ClientPlatformEntity) {
+    if (this.sockets.has(platform.clientId)) {
+      this.logger.warn(`Client ${platform.clientId} already initialized, skipping.`);
       return;
     }
 
-    if (!client.credentials || client.credentials.length === 0) {
-      this.logger.warn(
-        `Client ${client.clientId} has no credentials, skipping WhatsApp initialization.`,
-      );
-      return;
-    }
-
-    const whatsappCredential = client.credentials.find(
-      (cred) => cred.type === CredentialType.WHATSAPP_S3_BUCKET,
+    const whatsappCredential = platform.credentials?.find(
+      (cred) => cred.type === CredentialType.WHATSAPP_BUCKET,
     );
 
-    if (!whatsappCredential) {
+    if (!whatsappCredential || !whatsappCredential.value) {
       this.logger.warn(
-        `Client ${client.clientId} has no WhatsApp credentials, skipping initialization.`,
+        `Client ${platform.clientId} has no WhatsApp credentials, skipping initialization.`,
       );
       return;
     }
 
     try {
-      this.logger.debug(`Attempting to initialize WhatsApp client for clientId ${client.clientId}`);
-      await this.connect(client, whatsappCredential.value);
+      this.logger.debug(
+        `Attempting to initialize WhatsApp client for clientId ${platform.clientId}`,
+      );
+      await this.connect(platform, whatsappCredential);
     } catch (e) {
       this.logger.error(
-        `Failed to initialize WhatsApp client for clientId ${client.clientId}: ${e.message}`,
+        `Failed to initialize WhatsApp client for clientId ${platform.clientId}: ${e.message}`,
       );
     }
   }
@@ -137,53 +133,52 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  getSocket(clientId: string): WASocket | null {
-    return this.sockets.get(clientId) ?? null;
+  getSocket(platformId: string): WASocket | null {
+    return this.sockets.get(platformId) ?? null;
   }
 
   /**
    * Initiate connection and return QR code for scanning.
    * Use this from API endpoints to onboard new clients.
    */
-  async initiateConnection(clientId: string): Promise<{ qr?: string; status: string }> {
-    if (this.sockets.has(clientId)) {
+  async initiateConnection(platformId: string): Promise<{ qr?: string; status: string }> {
+    if (this.sockets.has(platformId)) {
       return { status: 'already_connected' };
     }
 
-    const client = await this.clientService.getClientById(clientId);
-    if (!client) {
-      throw new Error(`Client ${clientId} not found`);
-    }
+    const platform = await this.clientService.getPlatformById(platformId);
 
-    const whatsappCredential = client.credentials?.find(
-      (cred) => cred.type === CredentialType.WHATSAPP_S3_BUCKET,
+    const credential = platform.credentials?.find(
+      (cred) => cred.type === CredentialType.WHATSAPP_BUCKET,
     );
 
-    if (!whatsappCredential) {
-      throw new Error(`Client ${clientId} has no WhatsApp credentials`);
+    if (!credential || !credential.value) {
+      throw new NotFoundError(
+        `WhatsApp credential for platform ${platformId} not found. Please set up credentials before connecting.`,
+      );
     }
 
     return new Promise((resolve) => {
-      this.qrResolvers.set(clientId, (qr: string) => {
+      this.qrResolvers.set(platformId, (qr: string) => {
         resolve({ qr, status: 'qr_generated' });
       });
 
       // Start connection - QR will be captured in connection.update handler
-      this.connect(client, whatsappCredential.value).catch((err) => {
-        this.qrResolvers.delete(clientId);
+      this.connect(platform, credential).catch((err) => {
+        this.qrResolvers.delete(platformId);
         throw err;
       });
 
       // Timeout after 30 seconds if no QR
       setTimeout(() => {
-        if (this.qrResolvers.has(clientId)) {
-          this.qrResolvers.delete(clientId);
+        if (this.qrResolvers.has(platformId)) {
+          this.qrResolvers.delete(platformId);
           // Clean up the socket if still connecting
-          const sock = this.sockets.get(clientId);
-          if (sock && this.status.get(clientId) !== 'open') {
+          const sock = this.sockets.get(platformId);
+          if (sock && this.status.get(platformId) !== 'open') {
             sock.end(new Error('QR timeout'));
-            this.sockets.delete(clientId);
-            this.status.delete(clientId);
+            this.sockets.delete(platformId);
+            this.status.delete(platformId);
           }
           resolve({ status: 'timeout' });
         }
@@ -194,13 +189,16 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
   /**
    * Internal connection method - handles socket creation and events.
    */
-  private async connect(client: ClientEntity, credentialValue: string): Promise<WASocket> {
-    const { clientId } = client;
+  private async connect(
+    platform: ClientPlatformEntity,
+    credential: PlatformCredentialEntity,
+  ): Promise<WASocket> {
+    const clientId = platform.clientId;
     if (this.sockets.has(clientId)) return this.sockets.get(clientId)!;
 
     this.status.set(clientId, 'connecting');
 
-    const { state, saveCreds } = await this.getAuth(credentialValue);
+    const { state, saveCreds } = await this.getAuth(credential.value);
     const { version } = await fetchLatestBaileysVersion();
 
     const sock = makeWASocket({
@@ -253,7 +251,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
 
         // Only auto-reconnect for network issues, not auth failures
         if (!loggedOut && !authFailure) {
-          setTimeout(() => this.connect(client, credentialValue), 1500);
+          setTimeout(() => this.connect(platform, credential), 1500);
         }
       }
     });
@@ -271,11 +269,10 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
 
       const parsed = this.mapToSocialMediaEvent({
         msg: messages[0],
-        accountId: client.whatsappNumber!,
+        accountId: platform.accountId,
       });
       if (parsed) {
         this.logger.log(`Received whatsapp message`);
-        this.logger.debug(`Whatsapp message: ${JSON.stringify(parsed, null, 2)}`);
         await this.sendToOrchestration(parsed);
         return;
       }
@@ -445,10 +442,6 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       this.logger.debug('Received group message, which is currently not supported. Skipping.');
       return null;
     }
-
-    this.logger.debug(
-      `Mapping WhatsApp message to SocialMediaEvent: ${JSON.stringify(msg, null, 2)}`,
-    );
 
     const phoneOrId = targetId.split('@')[0];
     const messageId = Utils.generateUUID();

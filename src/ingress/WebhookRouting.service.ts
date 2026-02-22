@@ -31,9 +31,6 @@ export class WebhookRoutingService {
         this.logger.warn(`Unsupported Instagram event ${JSON.stringify(event, null, 2)}`);
         return;
       }
-      this.logger.debug(
-        `Routing event for channel ${parsedEvent.channel} and platform: ${parsedEvent.platform}`,
-      );
 
       await this.sendToOrchestrationQueue(parsedEvent);
     } catch (e) {
@@ -53,10 +50,6 @@ export class WebhookRoutingService {
         this.logger.warn(`Unsupported Facebook event ${JSON.stringify(event, null, 2)}`);
         return;
       }
-
-      this.logger.debug(
-        `Routing event for channel ${parsedEvent.channel} and platform: ${parsedEvent.platform}`,
-      );
 
       await this.sendToOrchestrationQueue(parsedEvent);
     } catch (e) {

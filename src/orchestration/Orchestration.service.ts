@@ -2,7 +2,13 @@ import { ConsoleLogger, Injectable } from '@nestjs/common';
 import { SocialMediaEvent } from '../types/messages';
 import { ClientService } from '../client';
 import { ConversationService } from '../messaging/Conversation.service';
-import { AgentEntity, ClientEntity, ConversationEntity } from '../types/entities';
+import {
+  AgentEntity,
+  ClientEntity,
+  ClientPlatformEntity,
+  ConversationEntity,
+  PlatformCredentialEntity,
+} from '../types/entities';
 import { Platform, PlatformChannel } from '../generated/prisma/enums';
 import { GenerationService } from '../generation';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -50,13 +56,22 @@ export class OrchestrationService {
         );
         return;
       }
+      const platform = await this.clientService.getPlatformByAccountId(
+        event.accountId,
+        event.platform,
+      );
 
-      const client = await this.clientService.getClientBySocialAccount({
-        accountId: event.accountId,
-        platform: event.platform,
-      });
+      const { canProcess, credential } = this.verifyPlatform(
+        platform,
+        event.platform,
+        event.channel,
+      );
 
-      const canClientProcess = this.verifyClient(client, event.platform, event.channel);
+      if (!canProcess || !credential) return;
+
+      const client = await this.clientService.getClientById(platform.clientId);
+
+      const canClientProcess = this.verifyClient(client);
       if (!canClientProcess) return;
 
       const conversation = await this.conversationService.getOrCreateConversation(
@@ -81,10 +96,11 @@ export class OrchestrationService {
       });
 
       await this.routeToQueue({
+        targetId: event.targetId,
         agent: selectedAgent,
         conversation,
-        client,
-        event,
+        credential,
+        client: client,
       });
     } catch (e) {
       if (e instanceof EarlyTerminationError) {
@@ -99,36 +115,40 @@ export class OrchestrationService {
     agent,
     conversation,
     client,
-    event,
+    credential,
+    targetId,
   }: {
     agent: AgentEntity;
     conversation: ConversationEntity;
     client: ClientEntity;
-    event: SocialMediaEvent;
+    credential: PlatformCredentialEntity;
+    targetId: string;
   }) {
     const payload: WorkerJobData = {
       conversation,
       client,
-      event,
+      targetId,
       agent,
+      credential,
     };
+    const jobId = Utils.generateUUID();
 
     switch (agent.agentKey) {
       case 'COMMUNITY_MANAGER':
         await this.agentCommunityManagerQueue.add('handleEvent', payload, {
-          jobId: event.messageId,
+          jobId,
           removeOnComplete: { age: 60 },
         });
         break;
       case 'CRM_INTEGRATION':
         await this.agentCrmIntegrationQueue.add('handleEvent', payload, {
-          jobId: event.messageId,
+          jobId,
           removeOnComplete: { age: 60 },
         });
         break;
       case 'BOOKING_MANAGER':
         await this.agentBookingManagerQueue.add('handleEvent', payload, {
-          jobId: event.messageId,
+          jobId,
           removeOnComplete: { age: 60 },
         });
         break;
@@ -197,54 +217,72 @@ export class OrchestrationService {
       metadata: {},
     });
 
-    this.logger.debug(
-      `Model decision: Agent ${selectedAgent.agentKey} with score ${decision.decisionScore}. Reason: ${decision.reason}`,
-    );
-
     return selectedAgent;
   }
 
-  verifyClient(client: ClientEntity, platform: Platform, channel: PlatformChannel): boolean {
-    const { businessName, isActive, credentials = [] } = client;
+  verifyPlatform(
+    clientPlatform: ClientPlatformEntity,
+    platform: Platform,
+    channel: PlatformChannel,
+  ): { canProcess: boolean; credential: PlatformCredentialEntity | null } {
+    if (clientPlatform.platform !== platform) {
+      this.logger.warn(
+        `Client platform ${clientPlatform.platform} does not match event platform ${platform}. Skipping event processing.`,
+      );
+      return { canProcess: false, credential: null };
+    }
+
+    const requiredCredential = Utils.resolveRequiredCredential(platform, channel);
+    const credential = clientPlatform.credentials?.find((cred) => cred.type === requiredCredential);
+    if (!credential) {
+      this.logger.warn(
+        `Client platform ${clientPlatform.platform} does not have the required credential ${requiredCredential} for channel ${channel}. Skipping event processing.`,
+      );
+      return { canProcess: false, credential: null };
+    }
+
+    if (credential.expiresAt && credential.expiresAt < new Date()) {
+      this.logger.warn(
+        `Client platform ${clientPlatform.platform} has an expired credential ${credential.credentialId}. Skipping event processing.`,
+      );
+      return { canProcess: false, credential: null };
+    }
+
+    return { canProcess: true, credential };
+  }
+
+  verifyClient(client: ClientEntity): boolean {
+    const { businessName, isActive } = client;
 
     if (!isActive) {
       this.logger.warn(`Client ${businessName} is inactive. Skipping event processing.`);
       return false;
     }
 
-    // Check platform-specific account IDs
-    const platformAccountMap = {
-      [Platform.WHATSAPP]: client.whatsappNumber,
-      [Platform.INSTAGRAM]: client.instagramAccountId,
-      [Platform.FACEBOOK]: client.facebookAccountId,
-    };
+    // const targetPlatform = platforms.find((p) => p.platform === platform);
 
-    if (!platformAccountMap[platform]) {
-      this.logger.warn(
-        `Client ${businessName} does not have a ${platform} account configured. Skipping event processing.`,
-      );
-      return false;
-    }
+    // if (!targetPlatform) {
+    //   this.logger.warn(
+    //     `Client ${businessName} does not have a ${platform} account configured. Skipping event processing.`,
+    //   );
+    //   return false;
+    // }
 
-    // Check credentials exist
-    if (credentials.length === 0) {
-      this.logger.warn(
-        `Client ${businessName} does not have any credentials configured. Skipping event processing.`,
-      );
-      return false;
-    }
+    // // Check credentials exist
+    // if (!targetPlatform.credentials.length) {
+    //   this.logger.warn(
+    //     `Client ${businessName} does not have any credentials configured or they are expired. Skipping event processing.`,
+    //   );
+    //   return false;
+    // }
 
-    const requiredCredential = Utils.resolveRequiredCredential(platform, channel);
-
-    // Check all required credentials in one pass
-
-    const credential = credentials.find((cred) => cred.type === requiredCredential);
-    if (!credential || (credential.expiresAt && credential.expiresAt < new Date())) {
-      this.logger.warn(
-        `Client ${businessName} does not have a valid ${requiredCredential} configured or it is expired. Skipping event processing.`,
-      );
-      return false;
-    }
+    // const requiredCredential = Utils.resolveRequiredCredential(platform, channel);
+    // if (!targetPlatform.credentials.some((cred) => cred.type === requiredCredential)) {
+    //   this.logger.warn(
+    //     `Client ${businessName} does not have the required credential ${requiredCredential} for platform ${platform} and channel ${channel}. Skipping event processing.`,
+    //   );
+    //   return false;
+    // }
 
     if (!client.agents || client.agents.length === 0) {
       this.logger.warn(

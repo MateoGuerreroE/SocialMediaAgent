@@ -7,7 +7,7 @@ import {
 } from '../types/entities';
 import { ExpectedModelResponseFormat, GenerationModel } from './models/model';
 import { PromptService } from './Prompt.service';
-import { ActionDecisionResponse, AgentDecisionResponse, ReplyRules } from './types';
+import { ActionDecisionResponse, AgentDecisionResponse } from './types';
 import { RequiredField, RetrievedField } from 'src/agent/types';
 import { Utils } from 'src/utils';
 import { AgentConfiguration } from 'src/types/nested';
@@ -43,8 +43,6 @@ export class GenerationService {
 
     const prompt = `${promptOverride ?? 'Given the following conversation, provide the client an appropiate response:'}${history}${client.events?.length ? '\n\n' + this.promptService.getClientEventsPrompt(client.events) : ''}`;
 
-    this.logger.debug(`System prompt: ${systemPrompt}`);
-    this.logger.debug(`User prompt: ${prompt}`);
     const generatedResponse = await this.model.sendToModel({
       prompt,
       systemPrompt,
@@ -83,7 +81,6 @@ export class GenerationService {
       expectedFormat,
     });
 
-    this.logger.debug(`Parsing model response: ${generatedResult}`);
     const result = Utils.parseModelResponse<AgentDecisionResponse>(generatedResult, expectedFormat);
 
     return result;
@@ -137,7 +134,6 @@ export class GenerationService {
       expectedFormat,
     });
 
-    this.logger.debug(`Parsing model response: ${generatedResult}`);
     const result = Utils.parseModelResponse<ActionDecisionResponse>(
       generatedResult,
       expectedFormat,
@@ -192,7 +188,6 @@ export class GenerationService {
       isExpectedFormatArray: true,
     });
 
-    this.logger.debug(`Parsing model response: ${generatedResult}`);
     const result = Utils.parseModelResponse<RetrievedField[]>(
       generatedResult,
       expectedFormat,
@@ -236,8 +231,6 @@ export class GenerationService {
     const history = this.promptService.formatConversationHistory(conversationMessages);
     const prompt = `Given the following conversation history: ${history}\n\nAnd the client context and reply rules: ${systemPrompt}\n\nCraft a response to the user that attempts to obtain the missing information needed to provide further assistance.${additionalContext ? `\n\nAdditionalContext: ${additionalContext}` : ''}`;
 
-    this.logger.debug(`System prompt: ${systemPrompt}`);
-    this.logger.debug(`User prompt: ${prompt}`);
     const generatedResponse = await this.model.sendToModel({
       prompt,
       systemPrompt,

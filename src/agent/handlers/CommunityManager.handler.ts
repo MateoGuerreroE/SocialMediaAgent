@@ -2,10 +2,9 @@ import { ConsoleLogger, Injectable } from '@nestjs/common';
 import {
   AgentActionEntity,
   AgentEntity,
-  ClientCredentialEntity,
   ClientEntity,
   ConversationEntity,
-  ConversationMessageEntity,
+  PlatformCredentialEntity,
 } from 'src/types/entities';
 import { AgentService } from '../Agent.service';
 import { Utils } from 'src/utils';
@@ -19,6 +18,7 @@ type CMHandlerContext = {
   client: ClientEntity;
   conversation: ConversationEntity;
   agent: AgentEntity;
+  credential: PlatformCredentialEntity;
   targetId: string;
   routingContext?: string;
 };
@@ -34,7 +34,14 @@ export class CommunityManagerHandler {
     private readonly alertAction: AlertAction,
   ) {}
 
-  async handle({ client, conversation, agent, targetId, routingContext }: CMHandlerContext) {
+  async handle({
+    client,
+    conversation,
+    agent,
+    targetId,
+    credential,
+    routingContext,
+  }: CMHandlerContext) {
     const agentData = await this.agentService.getAgent(agent.agentId);
     const actions = await this.agentService.getActionsByAgentId(agentData.agentId);
 
@@ -56,6 +63,7 @@ export class CommunityManagerHandler {
         `Single valid action ${validActions[0].actionId} for agent ${agentData.agentId}, executing directly`,
       );
       await this.handleActionExecution({
+        credential,
         action: validActions[0],
         client,
         conversation,
@@ -78,16 +86,13 @@ export class CommunityManagerHandler {
       return;
     }
 
-    this.logger.debug(
-      `Model decision: Action ${chosenAction.actionType} with score ${actionDecision.decisionScore}. Reason: ${actionDecision.reason}`,
-    );
-
     await this.handleActionExecution({
       action: chosenAction,
       client,
       conversation,
       agent: agentData,
       targetId,
+      credential,
       reason: actionDecision.reason,
       actions,
       routingContext,
@@ -101,6 +106,7 @@ export class CommunityManagerHandler {
     reason,
     agent,
     targetId,
+    credential,
     actions,
     routingContext,
   }: CMHandlerContext & {
@@ -108,11 +114,8 @@ export class CommunityManagerHandler {
     action: AgentActionEntity;
     actions?: AgentActionEntity[];
   }) {
-    const credential = client.credentials?.find(
-      (c) =>
-        c.type === Utils.resolveRequiredCredential(conversation.platform, conversation.channel),
-    );
-    if (!credential) {
+    const platform = client.platforms?.find((p) => p.platform === conversation.platform);
+    if (!platform) {
       this.logger.error(
         `No credential found for client ${client.clientId} required for platform ${conversation.platform} and channel ${conversation.channel}`,
       );
@@ -135,13 +138,22 @@ export class CommunityManagerHandler {
           client,
           action,
           agent,
+          credential,
           reason,
           conversation,
           routingContext,
         });
         break;
       case AgentActionType.ESCALATE:
-        await this.handleEscalate({ conversation, client, reason, actions, targetId, agent });
+        await this.handleEscalate({
+          conversation,
+          client,
+          reason,
+          actions,
+          targetId,
+          agent,
+          credential,
+        });
         break;
       default:
         this.logger.warn(`Unknown action type ${action.actionType} for action ${action.actionId}`);
@@ -160,7 +172,7 @@ export class CommunityManagerHandler {
     targetId: string;
     conversation: ConversationEntity;
     agent: AgentEntity;
-    credential: ClientCredentialEntity;
+    credential: PlatformCredentialEntity;
     routingContext?: string;
   }) {
     const agentConfig = agent.configuration;
@@ -191,6 +203,7 @@ export class CommunityManagerHandler {
     client,
     action,
     reason,
+    credential,
     conversation,
     actions,
     routingContext,
@@ -199,6 +212,7 @@ export class CommunityManagerHandler {
     client: ClientEntity;
     conversation: ConversationEntity;
     reason?: string;
+    credential: PlatformCredentialEntity;
     action: AgentActionEntity;
     actions?: AgentActionEntity[];
     routingContext?: string;
@@ -211,16 +225,6 @@ export class CommunityManagerHandler {
       if (!replyAction) {
         this.logger.warn(
           `No reply action found for agent ${action.agentId} to execute after alert action ${action.actionId}`,
-        );
-        return;
-      }
-      const replyCreds = client.credentials?.find(
-        (c) =>
-          c.type === Utils.resolveRequiredCredential(conversation.platform, conversation.channel),
-      );
-      if (!replyCreds) {
-        this.logger.warn(
-          `No credentials found for client ${client.clientId} to execute reply action after alert action ${action.actionId}`,
         );
         return;
       }
@@ -246,7 +250,7 @@ export class CommunityManagerHandler {
       await this.handleReply({
         agent,
         client,
-        credential: replyCreds,
+        credential,
         conversation,
         targetId: conversation.senderId,
         routingContext,
@@ -264,6 +268,7 @@ export class CommunityManagerHandler {
     client,
     reason,
     agent,
+    credential,
     actions,
     targetId,
   }: {
@@ -272,6 +277,7 @@ export class CommunityManagerHandler {
     agent: AgentEntity;
     targetId: string;
     reason?: string;
+    credential: PlatformCredentialEntity;
     actions?: AgentActionEntity[];
   }) {
     try {
@@ -293,18 +299,6 @@ export class CommunityManagerHandler {
           alertChannel: alertAction.configuration.alertChannel,
         });
 
-        const replyAction = actions.find((a) => a.actionType === AgentActionType.REPLY);
-        const replyCredential = client.credentials?.find(
-          (c) =>
-            c.type === Utils.resolveRequiredCredential(conversation.platform, conversation.channel),
-        );
-        if (!replyAction || !replyCredential) {
-          this.logger.warn(
-            `No reply action or credentials found for client ${client.clientId} to execute after escalate action in conversation ${conversation.conversationId}`,
-          );
-          return;
-        }
-
         const generatedReply = await this.generationService.generateEscalationMessage(
           reason,
           agent.configuration.modelTier,
@@ -316,7 +310,7 @@ export class CommunityManagerHandler {
           platform: conversation.platform,
           channel: conversation.channel,
           target: targetId,
-          credential: replyCredential,
+          credential,
         });
       } else {
         this.logger.warn(

@@ -3,10 +3,10 @@ import {
   AgentActionEntity,
   AgentEntity,
   AgentSessionEntity,
-  ClientCredentialEntity,
   ClientEntity,
   ConversationEntity,
   ConversationMessageEntity,
+  PlatformCredentialEntity,
 } from 'src/types/entities';
 import { AgentService } from '../Agent.service';
 import { ConversationService } from 'src/messaging';
@@ -62,11 +62,13 @@ export class CrmIntegrationHandler {
     conversation,
     agent,
     client,
+    credential,
   }: {
     targetId: string;
     conversation: ConversationEntity;
     agent: AgentEntity;
     client: ClientEntity;
+    credential: PlatformCredentialEntity;
   }) {
     const validAgent = await this.agentService.getAgent(agent.agentId);
     const actions = await this.agentService.getActionsByAgentId(validAgent.agentId);
@@ -81,8 +83,6 @@ export class CrmIntegrationHandler {
     // Validate all prerequisites
     if (!this.validateRequiredActions(actions)) return;
     const requiredActions = this.resolveRequiredActions(actions);
-    const credential = this.resolveCredential(conversation, client);
-    if (!credential) return;
 
     const { existingSession, messages } = await this.agentService.verifySessionExistence(
       conversation.conversationId,
@@ -123,6 +123,7 @@ export class CrmIntegrationHandler {
         await this.CMAgentHandler.handle({
           targetId,
           conversation,
+          credential,
           agent: cmAgent,
           client,
           routingContext: `Client has returned again to the CRM flow after having a completed session and the team being realerted. Data can't be captured again and someone will contact the user soon.`,
@@ -235,30 +236,6 @@ export class CrmIntegrationHandler {
   }
 
   /**
-   * Resolves the credential needed for the conversation's platform/channel
-   */
-  private resolveCredential(
-    conversation: ConversationEntity,
-    client: ClientEntity,
-  ): ClientCredentialEntity | null {
-    const requiredCredentialType = Utils.resolveRequiredCredential(
-      conversation.platform,
-      conversation.channel,
-    );
-
-    const credential = client.credentials?.find((cred) => cred.type === requiredCredentialType);
-
-    if (!credential) {
-      this.logger.error(
-        `No credential of type ${requiredCredentialType} found for client ${client.clientId}`,
-      );
-      return null;
-    }
-
-    return credential;
-  }
-
-  /**
    * Resolves all required agent actions from the actions list
    */
   private resolveRequiredActions(actions: AgentActionEntity[]): RequiredActions {
@@ -283,7 +260,7 @@ export class CrmIntegrationHandler {
     conversation: ConversationEntity;
     agent: AgentEntity;
     targetId: string;
-    credential: ClientCredentialEntity;
+    credential: PlatformCredentialEntity;
   }): Promise<void> {
     const { platform, channel } = conversation;
 
@@ -310,7 +287,7 @@ export class CrmIntegrationHandler {
     agent: AgentEntity;
     client: ClientEntity;
     targetId: string;
-    credential: ClientCredentialEntity;
+    credential: PlatformCredentialEntity;
     action: AgentActionEntity;
     conversation: ConversationEntity;
     session: AgentSessionEntity;
@@ -423,7 +400,7 @@ export class CrmIntegrationHandler {
     crmSubmitter?: AgentActionEntity;
     agent: AgentEntity;
     client: ClientEntity;
-    credential: ClientCredentialEntity;
+    credential: PlatformCredentialEntity;
     conversation: ConversationEntity;
     isInitial?: boolean;
   }): Promise<void> {
@@ -539,7 +516,7 @@ export class CrmIntegrationHandler {
     conversation: ConversationEntity;
     action: AgentActionEntity;
     client: ClientEntity;
-    credential: ClientCredentialEntity;
+    credential: PlatformCredentialEntity;
     targetId: string;
     agent: AgentEntity;
     session: AgentSessionEntity;
@@ -547,7 +524,6 @@ export class CrmIntegrationHandler {
     messages: ConversationMessageEntity[];
   }) {
     const configuration = action.configuration;
-    this.logger.debug(`SAVE CONFIGURATION: ${JSON.stringify(configuration, null, 2)}`);
     const urlTarget = configuration.url;
     const capturedFields: RetrievedField[] = session.state.capturedFields;
     const fieldMappings = configuration.fieldMappings;
@@ -560,8 +536,6 @@ export class CrmIntegrationHandler {
         [targetField]: field.value,
       };
     }, {});
-
-    this.logger.debug(`Mapped fields to be sent to CRM: ${JSON.stringify(mappedFields, null, 2)}`);
 
     const summary = await this.generationService.generateConversationSummary(messages);
     if (configuration.uniqueIdentifierField && configuration.uniqueIdentifier) {
@@ -670,7 +644,7 @@ export class CrmIntegrationHandler {
     targetId: string;
     conversation: ConversationEntity;
     agent: AgentEntity;
-    credential: ClientCredentialEntity;
+    credential: PlatformCredentialEntity;
     client: ClientEntity;
   }) {
     const generatedReply = await this.generationService.generateResponseWithClientContext({
@@ -706,7 +680,7 @@ export class CrmIntegrationHandler {
     conversation: ConversationEntity;
     targetId: string;
     client: ClientEntity;
-    credential: ClientCredentialEntity;
+    credential: PlatformCredentialEntity;
     notificationService: AgentActionEntity;
     agent: AgentEntity;
   }): Promise<void> {

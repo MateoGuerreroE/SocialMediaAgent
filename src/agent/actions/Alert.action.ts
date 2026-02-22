@@ -1,10 +1,13 @@
 import { ConsoleLogger, Injectable } from '@nestjs/common';
 import { AlertChannel } from '../../types/enums';
-import { ClientEntity } from 'src/types/entities';
+import { EmailHelper } from '../helpers/Email.helper';
 
 @Injectable()
 export class AlertAction {
-  constructor(private readonly logger: ConsoleLogger) {}
+  constructor(
+    private readonly logger: ConsoleLogger,
+    private readonly emailHelper: EmailHelper,
+  ) {}
 
   async execute({
     clientContext,
@@ -17,33 +20,50 @@ export class AlertAction {
     alertTarget: string;
     alertChannel: AlertChannel;
   }) {
-    const body = this.resolveBodyForChannel(generatedMessage, alertChannel, clientContext);
-    this.logger.log(
-      `Alerting ${alertTarget} through ${alertChannel} with message: ${JSON.stringify(body)}`,
-    );
+    this.logger.log(`Alerting ${alertTarget} through ${alertChannel}`);
 
-    // Alerts are hits to HTTP endpoints always as this is NOT an alerting aware system
-    try {
-      const result = await fetch(alertTarget, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!result.ok) {
-        const error = await result.text();
-        this.logger.error(
-          `Failed to send alert to ${alertTarget} through ${alertChannel}: ${error}`,
-        );
+    switch (alertChannel) {
+      case AlertChannel.EMAIL: {
+        try {
+          await this.emailHelper.sendEmail({
+            to: alertTarget,
+            subject: 'Alert from Social Media Agent',
+            body: `Client Context:\n${clientContext}\n\nReason:\n${generatedMessage}`,
+          });
+        } catch (error) {
+          this.logger.error(
+            `Error sending email alert to ${alertTarget}: ${
+              error instanceof Error ? error.message : JSON.stringify(error)
+            }`,
+          );
+        }
+        break;
       }
-    } catch (error) {
-      this.logger.error(
-        `Error sending alert to ${alertTarget} through ${alertChannel}: ${
-          error instanceof Error ? error.message : JSON.stringify(error)
-        }`,
-      );
+      default: {
+        const body = this.resolveBodyForChannel(generatedMessage, alertChannel, clientContext);
+        try {
+          const result = await fetch(alertTarget, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+          });
+
+          if (!result.ok) {
+            const error = await result.text();
+            this.logger.error(
+              `Failed to send alert to ${alertTarget} through ${alertChannel}: ${error}`,
+            );
+          }
+        } catch (error) {
+          this.logger.error(
+            `Error sending alert to ${alertTarget} through ${alertChannel}: ${
+              error instanceof Error ? error.message : JSON.stringify(error)
+            }`,
+          );
+        }
+      }
     }
   }
 
@@ -53,11 +73,6 @@ export class AlertAction {
     clientContext: string,
   ): Record<string, unknown> {
     switch (alertChannel) {
-      case AlertChannel.EMAIL:
-        return {
-          subject: 'Alert from Social Media Agent',
-          body: generatedMessage,
-        };
       case AlertChannel.SLACK:
         return {
           text: `*Alert from Social Media Agent:*\n\n${clientContext}\nReason: ${generatedMessage}`,

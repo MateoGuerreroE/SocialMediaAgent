@@ -12,10 +12,12 @@ import { IngressModule } from 'src/ingress/Ingress.module';
 import { MessagingModule } from 'src/messaging/Messaging.module';
 import { CrmIntegrationHandler } from './handlers/CrmIntegration.handler';
 import { CaptureDataAction } from './actions/CaptureData.action';
+import { EmailHelper } from './helpers/Email.helper';
 
 @Module({
   imports: [DataModule, GenerationModule, IngressModule, MessagingModule],
   providers: [
+    EmailHelper,
     AgentService,
     AgentCacheService,
     CommunityManagerWorker,

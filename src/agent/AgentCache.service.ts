@@ -1,6 +1,5 @@
 import { ConsoleLogger, Injectable } from '@nestjs/common';
 import { RedisService } from 'src/data';
-import { AgentKey } from 'src/generated/prisma/enums';
 import { AgentActionEntity, AgentEntity } from 'src/types/entities';
 
 @Injectable()

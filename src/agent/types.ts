@@ -1,9 +1,14 @@
-import { AgentEntity, ClientEntity, ConversationEntity } from 'src/types/entities';
-import { SocialMediaEvent } from 'src/types/messages';
+import {
+  AgentEntity,
+  ClientEntity,
+  ConversationEntity,
+  PlatformCredentialEntity,
+} from 'src/types/entities';
 
 export interface WorkerJobData {
   client: ClientEntity;
-  event: SocialMediaEvent;
+  targetId: string;
+  credential: PlatformCredentialEntity;
   conversation: ConversationEntity;
   agent: AgentEntity;
 }

@@ -23,11 +23,12 @@ export class CrmIntegrationWorker extends WorkerHost {
 
   async process(job: Job<WorkerJobData>): Promise<void> {
     this.logger.log(`Processing CRM Integration Job ${job.id} for agent ${job.data.agent.agentId}`);
-    const { client, conversation, agent } = job.data;
+    const { client, conversation, agent, credential } = job.data;
     try {
-      const targetId = job.data.event.targetId;
+      const targetId = job.data.targetId;
 
       await this.crmIntegrationHandler.handle({
+        credential,
         client,
         conversation,
         agent,
