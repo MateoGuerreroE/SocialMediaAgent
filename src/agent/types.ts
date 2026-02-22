@@ -1,6 +1,7 @@
 import {
   AgentEntity,
   ClientEntity,
+  ClientPlatformEntity,
   ConversationEntity,
   PlatformCredentialEntity,
 } from 'src/types/entities';
@@ -25,4 +26,11 @@ export interface RetrievedField {
   key: string;
   value: string;
   confidence: number;
+}
+
+export interface ConfirmationAssistantData {
+  platform: ClientPlatformEntity;
+  targetId: string;
+  credential: PlatformCredentialEntity;
+  conversation: ConversationEntity;
 }

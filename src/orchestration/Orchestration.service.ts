@@ -33,6 +33,7 @@ export class OrchestrationService {
     @InjectQueue('agent-community-manager') private readonly agentCommunityManagerQueue: Queue,
     @InjectQueue('agent-crm-integration') private readonly agentCrmIntegrationQueue: Queue,
     @InjectQueue('agent-booking-manager') private readonly agentBookingManagerQueue: Queue,
+    @InjectQueue('agent-confirm-assistant') private readonly agentConfirmAssistantQueue: Queue,
   ) {}
 
   async orchestrateEvent(event: SocialMediaEvent): Promise<void> {
@@ -86,8 +87,27 @@ export class OrchestrationService {
       if (event.channel === PlatformChannel.DIRECT_MESSAGE) {
         await this.bufferDMMessageForConversation(conversation, event);
       }
-
       await this.conversationService.addUserMessage(conversation, event);
+
+      if (platform.requiresConfirmation) {
+        if (conversation.isConfirmed === null) {
+          this.logger.warn(
+            `Client requires confirmation for platform and received conversation is not confirmed. Routing to assistant`,
+          );
+          await this.agentConfirmAssistantQueue.add('handleConfirmation', {
+            conversation,
+            platform,
+            credential,
+            targetId: event.targetId,
+          });
+
+          return;
+        } else if (conversation.isConfirmed === false) {
+          this.logger.warn(`
+            Conversation ${conversation.conversationId} has been flagged as not confirmed. Skipping processing.`);
+          return;
+        }
+      }
 
       const selectedAgent = await this.requireAgentDecision({
         agents: client.agents!,
@@ -221,7 +241,6 @@ export class OrchestrationService {
       reason: decision.reason,
       conversationId: conversation.conversationId,
       message,
-      metadata: {},
     });
 
     return selectedAgent;

@@ -8,7 +8,6 @@ export interface CreateAgentLog {
   decisionScore: number;
   conversationId: string;
   message: string;
-  metadata: any;
 }
 
 export interface CreateAgentSession {

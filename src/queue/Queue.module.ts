@@ -19,6 +19,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       { name: 'agent-community-manager' },
       { name: 'agent-crm-integration' },
       { name: 'agent-booking-manager' },
+      { name: 'agent-confirm-assistant' },
     ),
   ],
   exports: [BullModule],

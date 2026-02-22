@@ -23,6 +23,12 @@ export class ConversationService {
     });
   }
 
+  async confirmConversation(conversationId: string, isConfirmed: boolean): Promise<void> {
+    await this.conversationRepository.updateConversationStatus(conversationId, {
+      isConfirmed,
+    });
+  }
+
   async getConversationMessagesRelatedToSession(conversationId: string, sessionId: string) {
     return this.conversationMessageRepository.getMessagesBySessionId(conversationId, sessionId);
   }

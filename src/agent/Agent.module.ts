@@ -13,6 +13,8 @@ import { MessagingModule } from 'src/messaging/Messaging.module';
 import { CrmIntegrationHandler } from './handlers/CrmIntegration.handler';
 import { CaptureDataAction } from './actions/CaptureData.action';
 import { EmailHelper } from './helpers/Email.helper';
+import { ConfirmationAssistantHandler } from './handlers/ConfirmationAssistant.handler';
+import { ConfirmAssistantWorker } from './workers/ConfirmAssistant.worker';
 
 @Module({
   imports: [DataModule, GenerationModule, IngressModule, MessagingModule],
@@ -23,6 +25,8 @@ import { EmailHelper } from './helpers/Email.helper';
     CommunityManagerWorker,
     CrmIntegrationHandler,
     CrmIntegrationWorker,
+    ConfirmationAssistantHandler,
+    ConfirmAssistantWorker,
     CommunityManagerHandler,
     AlertAction,
     CaptureDataAction,

@@ -79,10 +79,10 @@ model Conversation {
   // Attributes
   platform             Platform
   channel              PlatformChannel
-  isConfirmed          Boolean         @default(false)
   commentSourceId      String? // For comments, this follows format: {postId}_{senderId}
   senderId             String
   postId               String? // For comments only
+  isConfirmed          Boolean?
   parentId             String? // For comment threads only
   senderUsername       String?
   // State
@@ -143,7 +143,7 @@ model ClientPlatform {
   clientId             String
   accountId            String
   requiresConfirmation Boolean              @default(false)
-  confirmQuestion      String?
+  confirmationConfig   Json?                @db.JsonB
   // Timestamps
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
@@ -188,7 +188,7 @@ model ClientAgent {
   name          String
   useCase       String
   isActive      Boolean        @default(true)
-  configuration Json
+  configuration Json           @db.JsonB
   // Timestamps
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -206,7 +206,6 @@ model AgentLog {
   decisionScore  Float
   conversationId String
   message        String
-  metadata       Json
   // Timestamps
   createdAt      DateTime @default(now())
 }
@@ -217,7 +216,7 @@ model AgentAction {
   actionType    AgentActionType
   useCase       String
   isActive      Boolean         @default(true)
-  configuration Json
+  configuration Json            @db.JsonB
   // Timestamps
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
@@ -228,7 +227,7 @@ model AgentVariant {
   agentId               String
   platform              Platform?
   channel               PlatformChannel?
-  overrideConfiguration Json
+  overrideConfiguration Json             @db.JsonB
   isActive              Boolean          @default(true)
   // Timestamps
   createdAt             DateTime         @default(now())
@@ -275,8 +274,8 @@ model AgentSession {
   status         AgentSessionStatus
   summary        String?
   conversationId String
-  state          Json
-  result         Json?
+  state          Json               @db.JsonB
+  result         Json?              @db.JsonB
 
   // Relations
   conversations Conversation[]
