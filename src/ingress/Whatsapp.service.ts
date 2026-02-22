@@ -98,8 +98,8 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async attemptInitializeExistentClient(platform: ClientPlatformEntity) {
-    if (this.sockets.has(platform.clientId)) {
-      this.logger.warn(`Client ${platform.clientId} already initialized, skipping.`);
+    if (this.sockets.has(platform.platformId)) {
+      this.logger.warn(`Platform ${platform.platformId} already initialized, skipping.`);
       return;
     }
 
@@ -109,19 +109,19 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
 
     if (!whatsappCredential || !whatsappCredential.value) {
       this.logger.warn(
-        `Client ${platform.clientId} has no WhatsApp credentials, skipping initialization.`,
+        `Platform ${platform.platformId} has no WhatsApp credentials, skipping initialization.`,
       );
       return;
     }
 
     try {
       this.logger.debug(
-        `Attempting to initialize WhatsApp client for clientId ${platform.clientId}`,
+        `Attempting to initialize WhatsApp client for platform ${platform.platformId}`,
       );
       await this.connect(platform, whatsappCredential);
     } catch (e) {
       this.logger.error(
-        `Failed to initialize WhatsApp client for clientId ${platform.clientId}: ${e.message}`,
+        `Failed to initialize WhatsApp client for platform ${platform.platformId}: ${e.message}`,
       );
     }
   }
@@ -193,10 +193,10 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     platform: ClientPlatformEntity,
     credential: PlatformCredentialEntity,
   ): Promise<WASocket> {
-    const clientId = platform.clientId;
-    if (this.sockets.has(clientId)) return this.sockets.get(clientId)!;
+    const platformId = platform.platformId;
+    if (this.sockets.has(platformId)) return this.sockets.get(platformId)!;
 
-    this.status.set(clientId, 'connecting');
+    this.status.set(platformId, 'connecting');
 
     const { state, saveCreds } = await this.getAuth(credential.value);
     const { version } = await fetchLatestBaileysVersion();
@@ -217,13 +217,13 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       const { connection, lastDisconnect, qr } = u;
 
       if (qr) {
-        this.logger.warn(`[${clientId}] QR generated`);
+        this.logger.warn(`[${platformId}] QR generated`);
 
         // If there's a pending resolver (from API call), send QR to it
-        const resolver = this.qrResolvers.get(clientId);
+        const resolver = this.qrResolvers.get(platformId);
         if (resolver) {
           resolver(qr);
-          this.qrResolvers.delete(clientId);
+          this.qrResolvers.delete(platformId);
         } else {
           // Fallback: print to terminal (for onModuleInit flows)
           qrcode.generate(qr, { small: true });
@@ -231,12 +231,12 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       }
 
       if (connection === 'open') {
-        this.status.set(clientId, 'open');
-        this.logger.log(`✅ [${clientId}] WhatsApp connected`);
+        this.status.set(platformId, 'open');
+        this.logger.log(`✅ [${platformId}] WhatsApp connected`);
       }
 
       if (connection === 'close') {
-        this.status.set(clientId, 'closed');
+        this.status.set(platformId, 'closed');
 
         const code = (lastDisconnect?.error as any)?.output?.statusCode;
         const loggedOut = code === DisconnectReason.loggedOut;
@@ -244,10 +244,10 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
           code === DisconnectReason.badSession || code === DisconnectReason.connectionReplaced;
 
         this.logger.warn(
-          `⚠️ [${clientId}] connection closed (loggedOut=${loggedOut}, code=${code})`,
+          `⚠️ [${platformId}] connection closed (loggedOut=${loggedOut}, code=${code})`,
         );
 
-        this.sockets.delete(clientId);
+        this.sockets.delete(platformId);
 
         // Only auto-reconnect for network issues, not auth failures
         if (!loggedOut && !authFailure) {
@@ -278,28 +278,28 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       }
     });
 
-    this.sockets.set(clientId, sock);
+    this.sockets.set(platformId, sock);
     return sock;
   }
 
-  getStatus(clientId: string) {
-    return this.status.get(clientId) ?? 'closed';
+  getStatus(platformId: string) {
+    return this.status.get(platformId) ?? 'closed';
   }
 
-  disconnect(clientId: string) {
-    const sock = this.sockets.get(clientId);
+  disconnect(platformId: string) {
+    const sock = this.sockets.get(platformId);
     if (!sock) return;
     try {
       sock.end(new Error('Manual disconnect'));
     } finally {
-      this.sockets.delete(clientId);
-      this.status.set(clientId, 'closed');
+      this.sockets.delete(platformId);
+      this.status.set(platformId, 'closed');
     }
   }
 
   onModuleDestroy() {
-    for (const [clientId] of this.sockets.entries()) {
-      this.disconnect(clientId);
+    for (const [platformId] of this.sockets.entries()) {
+      this.disconnect(platformId);
     }
   }
 

@@ -56,6 +56,7 @@ export class OrchestrationService {
         );
         return;
       }
+
       const platform = await this.clientService.getPlatformByAccountId(
         event.accountId,
         event.platform,
@@ -100,7 +101,10 @@ export class OrchestrationService {
         agent: selectedAgent,
         conversation,
         credential,
-        client: client,
+        client: {
+          ...client,
+          agents: [], // Cleanup agents to avoid sending unnecessary data to the worker
+        },
       });
     } catch (e) {
       if (e instanceof EarlyTerminationError) {
@@ -205,6 +209,9 @@ export class OrchestrationService {
       );
       return activeAgents[0];
     }
+    this.logger.log(
+      `Agent ${selectedAgent.agentKey} selected by model with confidence ${decision.decisionScore}.`,
+    );
 
     await this.agentLogRepository.createLog({
       logId: Utils.generateUUID(),

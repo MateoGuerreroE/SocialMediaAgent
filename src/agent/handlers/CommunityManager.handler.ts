@@ -45,6 +45,9 @@ export class CommunityManagerHandler {
     const agentData = await this.agentService.getAgent(agent.agentId);
     const actions = await this.agentService.getActionsByAgentId(agentData.agentId);
 
+    this.logger.debug(`Agent Data: ${JSON.stringify(agentData, null, 2)}`);
+    this.logger.debug(`Agent Actions: ${JSON.stringify(actions, null, 2)}`);
+
     const validActions = actions.filter((a) => a.isActive);
     if (!validActions.length) {
       this.logger.warn(`No active actions for agent ${agentData.agentId}`);
@@ -114,14 +117,6 @@ export class CommunityManagerHandler {
     action: AgentActionEntity;
     actions?: AgentActionEntity[];
   }) {
-    const platform = client.platforms?.find((p) => p.platform === conversation.platform);
-    if (!platform) {
-      this.logger.error(
-        `No credential found for client ${client.clientId} required for platform ${conversation.platform} and channel ${conversation.channel}`,
-      );
-      return;
-    }
-
     switch (action.actionType) {
       case AgentActionType.REPLY:
         await this.handleReply({
