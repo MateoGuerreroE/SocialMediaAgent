@@ -1,6 +1,6 @@
 export * from './Client.repository';
 export * from './ClientEvent.repository';
-export * from './ClientCredential.repository';
+export * from './ClientPlatform.repository';
 export * from './Conversation.repository';
 export * from './ConversationMessage.repository';
 export * from './Agent.repository';
@@ -9,3 +9,4 @@ export * from './AgentAction.repository';
 export * from './AgentPolicy.repository';
 export * from './AgentSession.repository';
 export * from './AgentVariant.repository';
+export * from './PlatformCredential.repository';

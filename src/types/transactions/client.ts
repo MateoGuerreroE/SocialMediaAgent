@@ -8,7 +8,7 @@ import {
   IsUUID,
   IsBoolean,
 } from 'class-validator';
-import { CredentialType } from '../../generated/prisma/enums';
+import { CredentialType, Platform } from '../../generated/prisma/enums';
 
 export class CreateClientDTO {
   @IsString()
@@ -117,10 +117,39 @@ export interface UpdateClientPayload extends UpdateClientDTO {
   clientId: string;
 }
 
-export class CreateCredentialsDTO {
+export class CreateClientPlatformDTO {
+  @IsNotEmpty()
+  @IsEnum(['FACEBOOK', 'INSTAGRAM', 'WHATSAPP'])
+  platform: Platform;
+
+  @IsUUID()
+  @IsNotEmpty()
+  clientId: string;
+
   @IsString()
   @IsNotEmpty()
-  @IsEnum(['PAGE_ACCESS_TOKEN', 'APP_ACCESS_TOKEN', 'WHATSAPP_S3_BUCKET'])
+  accountId: string;
+
+  @IsOptional()
+  @IsBoolean()
+  requiresConfirmation?: boolean;
+
+  @IsOptional()
+  @IsString()
+  confirmQuestion?: string;
+}
+
+export interface CreateClientPlatform extends CreateClientPlatformDTO {
+  platformId: string;
+}
+export class CreateCredentialDTO {
+  @IsUUID()
+  @IsNotEmpty()
+  platformId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @IsEnum(['PAGE_TOKEN', 'APP_TOKEN', 'WHATSAPP_BUCKET'])
   type: CredentialType;
 
   @IsString()
@@ -132,14 +161,30 @@ export class CreateCredentialsDTO {
   expiresAt?: string;
 }
 
-export interface CreateCredential extends CreateCredentialsDTO {
-  clientId: string;
-  clientCredentialId: string;
+export interface CreateCredential extends CreateCredentialDTO {
+  credentialId: string;
+}
+
+export class UpdateClientPlatformDTO {
+  @IsOptional()
+  @IsString()
+  accountId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  requiresConfirmation?: boolean;
+
+  @IsOptional()
+  @IsString()
+  confirmQuestion?: string;
+}
+export interface UpdateClientPlatform extends UpdateClientPlatformDTO {
+  platformId: string;
 }
 
 export class UpdateCredentialDTO {
   @IsOptional()
-  @IsEnum(['PAGE_ACCESS_TOKEN', 'APP_ACCESS_TOKEN', 'WHATSAPP_S3_BUCKET'])
+  @IsEnum(['PAGE_TOKEN', 'APP_TOKEN', 'WHATSAPP_BUCKET'])
   type?: CredentialType;
 
   @IsString()

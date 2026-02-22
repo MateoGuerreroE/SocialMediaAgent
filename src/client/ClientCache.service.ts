@@ -1,6 +1,5 @@
 import { ConsoleLogger, Injectable } from '@nestjs/common';
-import { Platform } from '../generated/prisma/enums';
-import { ClientEntity } from '../types/entities';
+import { ClientEntity, ClientPlatformEntity } from '../types/entities';
 import { RedisService } from '../data';
 
 @Injectable()
@@ -11,9 +10,9 @@ export class ClientCacheService {
   ) {}
   readonly TTL = 604800; // 1 week cache
 
-  async get(accountId: string, platform: Platform): Promise<ClientEntity | null> {
+  async getClient(clientId: string): Promise<ClientEntity | null> {
     try {
-      const key = this.buildKey(accountId, platform);
+      const key = this.buildKey(clientId);
       const cached = await this.redis.get(key);
 
       if (!cached) {
@@ -27,11 +26,39 @@ export class ClientCacheService {
     }
   }
 
-  async set(accountId: string, platform: Platform, client: ClientEntity): Promise<void> {
+  async getClientPlatform(accountId: string): Promise<ClientPlatformEntity | null> {
     try {
-      const key = this.buildKey(accountId, platform);
+      const key = this.buildPlatformKey(accountId);
+      const cached = await this.redis.get(key);
+
+      if (!cached) {
+        return null;
+      }
+
+      const platformData = JSON.parse(cached) as ClientPlatformEntity;
+      return platformData || null;
+    } catch (error) {
+      this.logger.error(`Cache GET error: ${error instanceof Error ? error.message : error}`);
+      return null; // Fail gracefully - return null to trigger DB fetch
+    }
+  }
+
+  async setClientPlatform(accountId: string, platformData: ClientPlatformEntity): Promise<void> {
+    try {
+      const key = this.buildPlatformKey(accountId);
+      await this.redis.setex(key, this.TTL, JSON.stringify(platformData));
+      this.logger.log(`Cache SET for platform account:${accountId}`);
+    } catch (error) {
+      this.logger.error(`Cache SET error: ${error instanceof Error ? error.message : error}`);
+      // Don't throw - caching is not critical
+    }
+  }
+
+  async setClient(clientId: string, client: ClientEntity): Promise<void> {
+    try {
+      const key = this.buildKey(clientId);
       await this.redis.setex(key, this.TTL, JSON.stringify(client));
-      this.logger.log(`Cache SET for ${platform}:${accountId}`);
+      this.logger.log(`Cache SET for client:${clientId}`);
     } catch (error) {
       this.logger.error(`Cache SET error: ${error instanceof Error ? error.message : error}`);
       // Don't throw - caching is not critical
@@ -40,28 +67,14 @@ export class ClientCacheService {
 
   async invalidate(client: ClientEntity): Promise<void> {
     try {
-      const keysToDelete: string[] = [];
-
-      // Invalidate Instagram cache if account exists
-      if (client.instagramAccountId) {
-        keysToDelete.push(this.buildKey(client.instagramAccountId, Platform.INSTAGRAM));
-      }
-
-      // Invalidate Facebook cache if account exists
-      if (client.facebookAccountId) {
-        keysToDelete.push(this.buildKey(client.facebookAccountId, Platform.FACEBOOK));
-      }
-
-      if (keysToDelete.length > 0) {
-        const deleted = await this.redis.del(...keysToDelete);
-        this.logger.log(
-          `Cache INVALIDATE: Deleted ${deleted} cache entries for clientId: ${client.clientId}`,
-        );
-      }
+      const key = this.buildKey(client.clientId);
+      await this.redis.del(key);
+      this.logger.log(`Cache INVALIDATED for client:${client.clientId}`);
     } catch (error) {
       this.logger.error(
         `Cache INVALIDATE error: ${error instanceof Error ? error.message : error}`,
       );
+      // Don't throw - cache invalidation failure is not critical
     }
   }
 
@@ -70,7 +83,11 @@ export class ClientCacheService {
    * Format: client:instagram:123456 or client:facebook:789012
    * This allows direct lookup by accountId + platform without DB query
    */
-  private buildKey(accountId: string, platform: Platform): string {
-    return `client:${platform}:${accountId}`;
+  private buildKey(clientId: string): string {
+    return `client:${clientId}`;
+  }
+
+  private buildPlatformKey(accountId: string): string {
+    return `client_platform:${accountId}`;
   }
 }

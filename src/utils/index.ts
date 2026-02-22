@@ -4,8 +4,7 @@ import timezone from 'dayjs/plugin/timezone';
 import merge from 'deepmerge';
 import { CredentialType, Platform, PlatformChannel } from 'src/generated/prisma/enums';
 import { RequiredField, RetrievedField } from '../agent/types';
-import { AgentEntity, ClientEntity } from 'src/types/entities';
-import { AgentConfigOverride } from 'src/types/nested';
+import { AgentEntity } from 'src/types/entities';
 import { ConsoleLogger } from '@nestjs/common';
 
 dayjs.extend(utc);
@@ -71,11 +70,11 @@ export class Utils {
 
   static resolveRequiredCredential(platform: Platform, channel: PlatformChannel): CredentialType {
     if (platform === Platform.WHATSAPP) {
-      return CredentialType.WHATSAPP_S3_BUCKET;
+      return CredentialType.WHATSAPP_BUCKET;
     } else if (platform === Platform.INSTAGRAM && channel === PlatformChannel.DIRECT_MESSAGE) {
-      return CredentialType.APP_ACCESS_TOKEN;
+      return CredentialType.APP_TOKEN;
     } else {
-      return CredentialType.PAGE_ACCESS_TOKEN;
+      return CredentialType.PAGE_TOKEN;
     }
   }
 

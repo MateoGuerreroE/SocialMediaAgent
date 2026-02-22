@@ -1,6 +1,6 @@
 import { ConsoleLogger, Injectable } from '@nestjs/common';
 import {
-  ClientCredentialRepository,
+  ClientPlatformRepository,
   ClientEventRepository,
   ClientRepository,
 } from '../data/repository';
@@ -8,33 +8,25 @@ import {
   CreateClient,
   CreateClientDTO,
   CreateClientEventDTO,
-  CreateCredentialsDTO,
+  CreateClientPlatformDTO,
   UpdateClientEventDTO,
   UpdateClientPayload,
-  UpdateCredentialDTO,
+  UpdateClientPlatformDTO,
 } from '../types/transactions';
 import { ConflictError, NotFoundError } from '../types/errors';
 import { Platform } from '../generated/prisma/enums';
-import { ClientEntity } from '../types/entities';
+import { ClientEntity, ClientPlatformEntity } from '../types/entities';
 import { ClientCacheService } from './ClientCache.service';
 
 @Injectable()
 export class ClientService {
   constructor(
     private readonly clientRepository: ClientRepository,
-    private readonly clientCredentialsRepository: ClientCredentialRepository,
+    private readonly clientPlatformRepository: ClientPlatformRepository,
     private readonly clientEventRepository: ClientEventRepository,
     private readonly clientCacheService: ClientCacheService,
     private readonly logger: ConsoleLogger,
   ) {}
-
-  async getClientById(clientId: string): Promise<ClientEntity> {
-    const client = await this.clientRepository.getClientById(clientId);
-    if (!client) {
-      throw new NotFoundError(`Client with ID ${clientId} not found.`);
-    }
-    return client;
-  }
 
   async createClient(dto: CreateClientDTO) {
     await this.verifyClientDoesNotExist(dto);
@@ -66,103 +58,99 @@ export class ClientService {
     await this.clientCacheService.invalidate(client);
   }
 
-  private async verifyClientDoesNotExist({
-    businessName,
-    instagramAccountId,
-    facebookAccountId,
-    whatsappNumber,
-  }: {
-    businessName: string;
-    instagramAccountId?: string;
-    facebookAccountId?: string;
-    whatsappNumber?: string;
-  }) {
+  private async verifyClientDoesNotExist({ businessName }: { businessName: string }) {
     const clientByName = await this.clientRepository.getClientByBusinessName(businessName);
 
     if (clientByName) {
       throw new ConflictError(`Client with business name ${businessName} already exists.`);
     }
-
-    if (instagramAccountId || facebookAccountId || whatsappNumber) {
-      const platforms: Record<Platform, string | undefined> = {
-        [Platform.INSTAGRAM]: instagramAccountId,
-        [Platform.FACEBOOK]: facebookAccountId,
-        [Platform.WHATSAPP]: whatsappNumber,
-      };
-
-      for (const [platformKey, accountId] of Object.entries(platforms)) {
-        if (accountId) {
-          const clientByAccount = await this.clientRepository.locateClientByAccount(
-            platformKey as Platform,
-            accountId,
-          );
-
-          if (clientByAccount) {
-            throw new ConflictError(
-              `Client with ${platformKey} Account ID ${accountId} already exists.`,
-            );
-          }
-        }
-      }
-    }
   }
 
-  async getClientBySocialAccount({
-    accountId,
-    platform,
-    useCache = true,
-  }: {
-    accountId: string;
-    platform: Platform;
-
-    useCache?: boolean;
-  }): Promise<ClientEntity> {
-    this.logger.log(`Retrieving client for account ${accountId}`);
-    let client: ClientEntity | null;
-    if (useCache) {
-      client = await this.clientCacheService.get(accountId, platform);
-      if (client) {
-        this.logger.log(`Cache HIT for ${platform}:${accountId}`);
-        return client;
-      }
+  async getClientById(clientId: string): Promise<ClientEntity> {
+    const cachedClient = await this.clientCacheService.getClient(clientId);
+    if (cachedClient) {
+      this.logger.log(`Cache HIT for client:${clientId}`);
+      return cachedClient;
     }
-    this.logger.log(`Cache MISS for ${platform}:${accountId}`);
+    this.logger.log(`Cache MISS for client:${clientId}`);
+    const client = await this.clientRepository.getClientById(clientId, true);
 
-    client = await this.clientRepository.locateClientByAccount(platform, accountId);
-
-    if (!client) throw new NotFoundError(`No client found for ${platform} account ID ${accountId}`);
-
-    await this.clientCacheService.set(accountId, platform, client);
-
-    return client;
-  }
-
-  // Credentials
-  async createClientCredential(clientId: string, dto: CreateCredentialsDTO) {
-    const client = await this.clientRepository.getClientById(clientId);
     if (!client) {
       throw new NotFoundError(`Client with ID ${clientId} not found.`);
     }
 
-    const credentialId = crypto.randomUUID();
+    await this.clientCacheService.setClient(clientId, client);
 
-    return this.clientCredentialsRepository.createCredentials({
-      clientId,
-      clientCredentialId: credentialId,
+    return client;
+  }
+
+  async getPlatformByAccountId(
+    accountId: string,
+    platform: Platform,
+  ): Promise<ClientPlatformEntity> {
+    const cachedPlatform = await this.clientCacheService.getClientPlatform(accountId);
+    if (cachedPlatform) {
+      this.logger.log(`Cache HIT for platform account:${accountId}`);
+      return cachedPlatform;
+    }
+    this.logger.log(`Cache MISS for platform account:${accountId}`);
+    const platformResult = await this.clientPlatformRepository.retrievePlatformByAccount(
+      platform,
+      accountId,
+    );
+
+    if (!platformResult) {
+      throw new NotFoundError(`No client platform found for ${platform} account ID ${accountId}`);
+    }
+
+    await this.clientCacheService.setClientPlatform(accountId, platformResult);
+
+    return platformResult;
+  }
+
+  async createPlatform(dto: CreateClientPlatformDTO) {
+    const client = await this.clientRepository.getClientById(dto.clientId);
+    if (!client) {
+      throw new NotFoundError(`Client with ID ${dto.clientId} not found.`);
+    }
+
+    const existentPlatform = await this.clientPlatformRepository.getByPlatformAndClientId(
+      dto.platform,
+      dto.clientId,
+    );
+
+    if (existentPlatform) {
+      throw new ConflictError(
+        `Platform ${dto.platform} already exists for client with ID ${dto.clientId}.`,
+      );
+    }
+
+    const platformId = crypto.randomUUID();
+
+    return this.clientPlatformRepository.createClientPlatform({
       ...dto,
+      platformId,
     });
   }
 
-  async updateClientCredential(credentialId: string, updates: UpdateCredentialDTO) {
-    const credential = await this.clientCredentialsRepository.getByCredentialId(credentialId);
-    if (!credential) {
-      throw new NotFoundError(`Client credential with ID ${credentialId} not found.`);
+  async updateClientPlatform(platformId: string, updates: UpdateClientPlatformDTO) {
+    const platform = await this.clientPlatformRepository.getByPlatformId(platformId);
+    if (!platform) {
+      throw new NotFoundError(`Client platform with ID ${platformId} not found.`);
     }
 
-    await this.clientCredentialsRepository.updateCredential({
-      credentialId,
+    await this.clientPlatformRepository.updateClientPlatform({
+      platformId,
       ...updates,
     });
+  }
+
+  async getPlatformById(platformId: string): Promise<ClientPlatformEntity> {
+    const platform = await this.clientPlatformRepository.getByPlatformId(platformId);
+    if (!platform) {
+      throw new NotFoundError(`Client platform with ID ${platformId} not found.`);
+    }
+    return platform;
   }
 
   // Events
@@ -192,7 +180,7 @@ export class ClientService {
     });
   }
 
-  async getClientsWithActiveWhatsappIntegrations(): Promise<ClientEntity[]> {
-    return this.clientRepository.getClientsWithWhatsappNumber();
+  async getAllClientWhatsappPlatforms(): Promise<ClientPlatformEntity[]> {
+    return this.clientPlatformRepository.getAllPlatformsByPlatform(Platform.WHATSAPP);
   }
 }

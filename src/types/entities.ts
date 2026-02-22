@@ -20,15 +20,12 @@ export interface ClientEntity {
   businessHours: string;
   contactOptions: string;
   dynamicInformation: string | null;
-  whatsappNumber: string | null;
-  instagramAccountId: string | null;
-  facebookAccountId: string | null;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
 
   events?: ClientEventEntity[];
-  credentials?: ClientCredentialEntity[];
+  platforms?: ClientPlatformEntity[];
   agents?: AgentEntity[];
 }
 
@@ -44,12 +41,25 @@ export interface ClientEventEntity {
   updatedAt: Date;
 }
 
-export interface ClientCredentialEntity {
-  clientCredentialId: string;
+export interface ClientPlatformEntity {
+  platformId: string;
+  platform: Platform;
   clientId: string;
+  accountId: string;
+  requiresConfirmation: boolean;
+  confirmQuestion: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+
+  credentials?: PlatformCredentialEntity[];
+}
+
+export interface PlatformCredentialEntity {
+  credentialId: string;
+  platformId: string;
   type: CredentialType;
-  expiresAt: Date | null;
   value: string;
+  expiresAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -113,7 +123,7 @@ export interface AgentSessionEntity {
   summary: string | null;
   conversationId: string;
   state: any; // TODO TYPES THIS
-  result: any | null;
+  result: any;
 }
 
 export interface AgentActionEntity {

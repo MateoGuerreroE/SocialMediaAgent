@@ -52,6 +52,12 @@ enum ApplicationActor {
   AGENT
 }
 
+enum CredentialType {
+  PAGE_TOKEN
+  APP_TOKEN
+  WHATSAPP_BUCKET
+}
+
 enum AgentKey {
   COMMUNITY_MANAGER
   CRM_INTEGRATION
@@ -66,12 +72,6 @@ enum AgentSessionStatus {
   FAILED
 }
 
-enum CredentialType {
-  PAGE_ACCESS_TOKEN
-  APP_ACCESS_TOKEN
-  WHATSAPP_S3_BUCKET
-}
-
 model Conversation {
   conversationId       String          @id @default(uuid())
   accountId            String
@@ -79,6 +79,7 @@ model Conversation {
   // Attributes
   platform             Platform
   channel              PlatformChannel
+  isConfirmed          Boolean         @default(false)
   commentSourceId      String? // For comments, this follows format: {postId}_{senderId}
   senderId             String
   postId               String? // For comments only
@@ -125,32 +126,43 @@ model Client {
   businessHours       String
   contactOptions      String
   dynamicInformation  String?
-  whatsappNumber      String?
-  instagramAccountId  String?
-  facebookAccountId   String?
   isActive            Boolean  @default(true)
   // Timestamps
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
   // Relations
-  events      ClientEvent[]
-  agents      ClientAgent[]
-  credentials ClientCredential[]
+  events    ClientEvent[]
+  agents    ClientAgent[]
+  platforms ClientPlatform[]
 }
 
-model ClientCredential {
-  clientCredentialId String         @id @default(uuid())
-  clientId           String
-  type               CredentialType
-  expiresAt          DateTime?
-  value              String
+model ClientPlatform {
+  platformId           String               @id @default(uuid())
+  platform             Platform
+  clientId             String
+  accountId            String
+  requiresConfirmation Boolean              @default(false)
+  confirmQuestion      String?
   // Timestamps
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  client               Client               @relation(fields: [clientId], references: [clientId])
+  credentials          PlatformCredential[]
+}
+
+model PlatformCredential {
+  credentialId String         @id @default(uuid())
+  platformId   String
+  type         CredentialType
+  value        String
+  expiresAt    DateTime?
+  // Timestamps
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
   // Relations
-  client Client? @relation(fields: [clientId], references: [clientId])
+  platform ClientPlatform @relation(fields: [platformId], references: [platformId])
 }
 
 model ClientEvent {
@@ -170,18 +182,18 @@ model ClientEvent {
 }
 
 model ClientAgent {
-  agentId       String   @id @default(uuid())
+  agentId       String         @id @default(uuid())
   clientId      String
   agentKey      AgentKey
   name          String
   useCase       String
-  isActive      Boolean  @default(true)
+  isActive      Boolean        @default(true)
   configuration Json
   // Timestamps
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   // Relations
-  client        Client?  @relation(fields: [clientId], references: [clientId])
+  client        Client?        @relation(fields: [clientId], references: [clientId])
   variants      AgentVariant[]
   policies      AgentPolicy[]
 }

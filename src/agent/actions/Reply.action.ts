@@ -1,8 +1,9 @@
 import { ConsoleLogger, Injectable } from '@nestjs/common';
 import { CredentialType, Platform, PlatformChannel } from 'src/generated/prisma/enums';
 import { WhatsappService } from 'src/ingress/Whatsapp.service';
-import { ClientCredentialEntity } from 'src/types/entities';
 import { ConflictError } from 'src/types/errors';
+import { Utils } from '../../utils';
+import { PlatformCredentialEntity } from '../../types/entities';
 
 @Injectable()
 export class ReplyAction {
@@ -22,16 +23,17 @@ export class ReplyAction {
     platform: Platform;
     target: string;
     channel: PlatformChannel;
-    credential: ClientCredentialEntity;
+    credential: PlatformCredentialEntity;
   }) {
     let result: string | null = null;
+    await Utils.sleep(Math.min(message.length * 25, 5000)); // Simulate typing time, max 5 seconds
     switch (platform) {
       case Platform.WHATSAPP:
         if (channel !== PlatformChannel.DIRECT_MESSAGE) {
           throw new ConflictError('WhatsApp only supports DM channel');
         }
         result = await this.replyWhatsappMessage({
-          clientId: credential.clientId,
+          platformId: credential.platformId,
           message,
           target,
         });
@@ -64,17 +66,17 @@ export class ReplyAction {
   }
 
   async replyWhatsappMessage({
-    clientId,
+    platformId,
     message,
     target,
   }: {
-    clientId: string;
+    platformId: string;
     message: string;
     target: string;
   }): Promise<string | null> {
-    const socket = this.whatsappService.getSocket(clientId);
+    const socket = this.whatsappService.getSocket(platformId);
     if (!socket) {
-      this.logger.error(`No WhatsApp socket found for client ${clientId}`);
+      this.logger.error(`No WhatsApp socket found for platform ${platformId}`);
       return null;
     }
     // TODO Verify If this returns any useful information that we can log, like messageId or conversationId for better traceability
@@ -82,11 +84,11 @@ export class ReplyAction {
       const sentMessage = await socket.sendMessage(target, {
         text: message,
       });
-      this.logger.log(`Successfully sent WhatsApp message to ${target} for client ${clientId}`);
+      this.logger.log(`Successfully sent WhatsApp message to ${target} for platform ${platformId}`);
       return sentMessage?.key?.id ?? null;
     } catch (e) {
       this.logger.error(
-        `Failed to send WhatsApp message to ${target} for client ${clientId}: ${e.message}`,
+        `Failed to send WhatsApp message to ${target} for platform ${platformId}: ${e.message}`,
       );
       return null;
     }
@@ -101,14 +103,11 @@ export class ReplyAction {
     message: string;
     platform: Platform;
     target: string;
-    credential: ClientCredentialEntity;
+    credential: PlatformCredentialEntity;
   }): Promise<string | null> {
-    if (platform === Platform.INSTAGRAM && credential.type !== CredentialType.APP_ACCESS_TOKEN) {
+    if (platform === Platform.INSTAGRAM && credential.type !== CredentialType.APP_TOKEN) {
       throw new ConflictError('Invalid credential type for replying to meta DM on Instagram');
-    } else if (
-      platform === Platform.FACEBOOK &&
-      credential.type !== CredentialType.PAGE_ACCESS_TOKEN
-    ) {
+    } else if (platform === Platform.FACEBOOK && credential.type !== CredentialType.PAGE_TOKEN) {
       throw new ConflictError('Invalid credential type for replying to meta DM on Facebook');
     }
 
@@ -143,9 +142,9 @@ export class ReplyAction {
     message: string;
     platform: Platform;
     target: string;
-    credential: ClientCredentialEntity;
+    credential: PlatformCredentialEntity;
   }): Promise<string | null> {
-    if (credential.type !== CredentialType.PAGE_ACCESS_TOKEN) {
+    if (credential.type !== CredentialType.PAGE_TOKEN) {
       throw new ConflictError('Invalid credential type for replying to meta comment');
     }
 

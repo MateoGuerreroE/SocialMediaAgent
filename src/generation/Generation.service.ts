@@ -7,7 +7,7 @@ import {
 } from '../types/entities';
 import { ExpectedModelResponseFormat, GenerationModel } from './models/model';
 import { PromptService } from './Prompt.service';
-import { ActionDecisionResponse, AgentDecisionResponse, ReplyRules } from './types';
+import { ActionDecisionResponse, AgentDecisionResponse } from './types';
 import { RequiredField, RetrievedField } from 'src/agent/types';
 import { Utils } from 'src/utils';
 import { AgentConfiguration } from 'src/types/nested';
@@ -81,7 +81,6 @@ export class GenerationService {
       expectedFormat,
     });
 
-    this.logger.debug(`Parsing model response: ${generatedResult}`);
     const result = Utils.parseModelResponse<AgentDecisionResponse>(generatedResult, expectedFormat);
 
     return result;
@@ -135,7 +134,6 @@ export class GenerationService {
       expectedFormat,
     });
 
-    this.logger.debug(`Parsing model response: ${generatedResult}`);
     const result = Utils.parseModelResponse<ActionDecisionResponse>(
       generatedResult,
       expectedFormat,
@@ -165,10 +163,16 @@ export class GenerationService {
   async extractFieldsFromResponse(
     requiredFields: RequiredField[],
     conversationMessages: ConversationMessageEntity[],
+    extractionContext?: string,
   ): Promise<RetrievedField[]> {
     const history = this.promptService.formatConversationHistory(conversationMessages);
-    const systemPrompt = `You are a data extraction agent. Your task is to extract specific pieces of information from the conversation history based on the required fields provided.`;
-    const prompt = `Given the following conversation history: ${history}\n\nExtract the following required fields: ${this.promptService.getRequiredFieldsFormat(requiredFields)}\n\nFor each field, return an object with three properties:\n- "key": the field identifier (string)\n- "value": the extracted value converted to a string (even for boolean/number types)\n- "confidence": your confidence in the extraction (number between 0 and 1)\n\nIf a field cannot be extracted, set value to an empty string and confidence to 0.`;
+
+    // System: Role and core extraction behavior (static, reusable)
+    const systemPrompt = `You are a data extraction agent. Your task is to extract specific pieces of information from conversation histories. Handle missing or uncertain data gracefully by adjusting confidence scores accordingly.`;
+
+    // Prompt: Conversation context and specific extraction task (dynamic)
+    const fieldsDescription = this.promptService.getRequiredFieldsFormat(requiredFields);
+    const prompt = `Extract the following fields from this conversation:\n${history}\n\nFields to extract:\n${fieldsDescription}\n\nFor each field, return a JSON object with:\n- "key": the field identifier (string)\n- "value": the extracted value converted to a string (even for boolean/number types)\n- "confidence": your confidence in the extraction (number between 0 and 1)\n\nIf a field cannot be extracted, set value to an empty string and confidence to 0.${extractionContext ? `\n\nAdditional context for extraction: ${extractionContext}` : ''}`;
 
     // Expected format for RetrievedField objects
     const expectedFormat: ExpectedModelResponseFormat = [
@@ -184,7 +188,6 @@ export class GenerationService {
       isExpectedFormatArray: true,
     });
 
-    this.logger.debug(`Parsing model response: ${generatedResult}`);
     const result = Utils.parseModelResponse<RetrievedField[]>(
       generatedResult,
       expectedFormat,

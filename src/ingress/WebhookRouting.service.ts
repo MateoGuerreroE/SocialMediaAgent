@@ -31,22 +31,19 @@ export class WebhookRoutingService {
         this.logger.warn(`Unsupported Instagram event ${JSON.stringify(event, null, 2)}`);
         return;
       }
-      this.logger.debug(
-        `Routing event for channel ${parsedEvent.channel} and platform: ${parsedEvent.platform}`,
-      );
 
       await this.sendToOrchestrationQueue(parsedEvent);
     } catch (e) {
-      this.logger.error(
-        `Error parsing Instagram event: ${e instanceof Error ? e.message : String(e)}`,
+      this.logger.warn(
+        `Failed to parse Instagram event ${JSON.stringify(event, null, 2)}: ${e instanceof Error ? e.message : String(e)}`,
       );
-      this.logger.warn(`Failed to parse Instagram event ${JSON.stringify(event, null, 2)}`);
       return;
     }
   }
 
   async routeFacebookEvent(event: FacebookEvent) {
     this.logger.log(`Received Facebook event for account ${event.id}`);
+
     try {
       const parsedEvent = this.parseFacebookEvent(event);
       if (!parsedEvent) {
@@ -54,16 +51,11 @@ export class WebhookRoutingService {
         return;
       }
 
-      this.logger.debug(
-        `Routing event for channel ${parsedEvent.channel} and platform: ${parsedEvent.platform}`,
-      );
-
       await this.sendToOrchestrationQueue(parsedEvent);
     } catch (e) {
-      this.logger.error(
-        `Error parsing Facebook event: ${e instanceof Error ? e.message : String(e)}`,
+      this.logger.warn(
+        `Failed to parse Facebook event ${JSON.stringify(event, null, 2)}: ${e instanceof Error ? e.message : String(e)}`,
       );
-      this.logger.warn(`Failed to parse Facebook event ${JSON.stringify(event, null, 2)}`);
       return;
     }
   }

@@ -25,18 +25,17 @@ export class CommunityManagerWorker extends WorkerHost {
     this.logger.log(
       `Processing Community Manager Job ${job.id} for agent ${job.data.agent.agentId}`,
     );
-    const { client, conversation, agent } = job.data;
+    const { client, conversation, agent, credential, targetId } = job.data;
     try {
-      const targetId = job.data.event.targetId;
-
       await this.handler.handle({
+        credential,
         client,
         conversation,
         agent,
         targetId,
       });
     } catch (e) {
-      this.logger.error(`Unable to process Community Manager Job`);
+      this.logger.error(`Unable to process Community Manager Job: ${e.message}`, e.stack);
     } finally {
       await this.messageWindowService.deleteProcessingKey(conversation.conversationId);
     }

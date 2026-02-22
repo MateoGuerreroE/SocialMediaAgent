@@ -1,30 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../Prisma.service';
 import { ClientEntity } from '../../types/entities';
-import { CredentialType, Platform } from '../../generated/prisma/enums';
 import { CreateClient, UpdateClientPayload } from '../../types/transactions';
 
 @Injectable()
 export class ClientRepository {
   constructor(private readonly prisma: PrismaService) {}
-
-  async locateClientByAccount(platform: Platform, accountId: string): Promise<ClientEntity | null> {
-    return this.prisma.client.findFirst({
-      where: {
-        ...(platform === Platform.INSTAGRAM && { instagramAccountId: accountId }),
-        ...(platform === Platform.FACEBOOK && { facebookAccountId: accountId }),
-      },
-      include: {
-        events: true,
-        credentials: true,
-        agents: {
-          include: {
-            policies: true,
-          },
-        },
-      },
-    }) as Promise<ClientEntity | null>;
-  }
 
   async createClient(clientData: CreateClient): Promise<ClientEntity> {
     return this.prisma.client.create({
@@ -57,25 +38,8 @@ export class ClientRepository {
       where: { clientId },
       include: {
         events: includeRelations,
-        credentials: includeRelations,
+        agents: includeRelations,
       },
     }) as Promise<ClientEntity | null>;
-  }
-
-  async getClientsWithWhatsappNumber(): Promise<ClientEntity[]> {
-    return this.prisma.client.findMany({
-      where: {
-        whatsappNumber: {
-          not: null,
-        },
-      },
-      include: {
-        credentials: {
-          where: {
-            type: CredentialType.WHATSAPP_S3_BUCKET,
-          },
-        },
-      },
-    });
   }
 }
