@@ -96,6 +96,7 @@ export class OrchestrationService {
           );
           await this.agentConfirmAssistantQueue.add('handleConfirmation', {
             conversation,
+            client,
             platform,
             credential,
             targetId: event.targetId,

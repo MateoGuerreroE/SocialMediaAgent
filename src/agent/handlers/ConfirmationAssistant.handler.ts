@@ -3,6 +3,8 @@ import { ConfirmationAssistantData, RequiredField } from '../types';
 import { ReplyAction } from '../actions/Reply.action';
 import { ConversationService } from '../../messaging';
 import { GenerationService } from '../../generation';
+import { CommunityManagerHandler } from './CommunityManager.handler';
+import { AgentKey } from '../../generated/prisma/enums';
 
 @Injectable()
 export class ConfirmationAssistantHandler {
@@ -11,9 +13,16 @@ export class ConfirmationAssistantHandler {
     private readonly replyAction: ReplyAction,
     private readonly generationService: GenerationService,
     private readonly conversationService: ConversationService,
+    private readonly communityManagerHandler: CommunityManagerHandler,
   ) {}
 
-  async handle({ platform, conversation, targetId, credential }: ConfirmationAssistantData) {
+  async handle({
+    platform,
+    conversation,
+    targetId,
+    credential,
+    client,
+  }: ConfirmationAssistantData) {
     if (!conversation.messages || conversation.messages.length === 0) {
       this.logger.warn(`No messages found in conversation ${conversation.conversationId}`);
       return;
@@ -72,21 +81,17 @@ export class ConfirmationAssistantHandler {
         break;
       }
       case 'no': {
-        const reply = await this.generationService.simpleGenerate(
-          `You just received confirmation, and internally next messages would be redirected to the proper agent. Based on last user response, generate a acknowledgement of the received information and ask politely what can you help the user with\nLast message: ${lastMessage.content}`,
-        );
+        this.logger.log(`User denied confirmation, routing to community manager`);
+        await this.conversationService.confirmConversation(conversation.conversationId, true);
 
-        await this.replyAction.execute({
-          platform: conversation.platform,
-          target: targetId,
+        await this.routeToCommunityManager({
+          client,
+          platform,
+          conversation,
           credential,
-          channel: conversation.channel,
-          message: reply,
+          targetId,
         });
 
-        await this.conversationService.addAgentMessage(conversation, 'confirmation_agent', reply);
-
-        await this.conversationService.confirmConversation(conversation.conversationId, true);
         break;
       }
       case 'unrelated': {
@@ -112,5 +117,27 @@ export class ConfirmationAssistantHandler {
         break;
       }
     }
+  }
+
+  async routeToCommunityManager(data: ConfirmationAssistantData) {
+    const { client } = data;
+    const cmAgent = client.agents?.find((agent) => agent.agentKey === AgentKey.COMMUNITY_MANAGER);
+
+    if (!cmAgent) {
+      this.logger.error(
+        `No community manager agent found for client ${client.clientId}, unable to route conversation`,
+      );
+      return;
+    }
+
+    await this.communityManagerHandler.handle({
+      client,
+      conversation: data.conversation,
+      agent: cmAgent,
+      credential: data.credential,
+      targetId: data.targetId,
+      routingContext:
+        'Conversation was routed from confirmation assistant. Acknowledge the user and reply accordingly or offer assistance',
+    });
   }
 }

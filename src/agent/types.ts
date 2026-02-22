@@ -30,6 +30,7 @@ export interface RetrievedField {
 
 export interface ConfirmationAssistantData {
   platform: ClientPlatformEntity;
+  client: ClientEntity;
   targetId: string;
   credential: PlatformCredentialEntity;
   conversation: ConversationEntity;
