@@ -12,8 +12,12 @@ export interface AgentConfiguration {
 
 export type AgentConfigOverride = Partial<AgentConfiguration>;
 
+export interface PlatformConfig {
+  confirmation?: ConfirmationConfig;
+  bannedSenders?: string[];
+}
+
 export interface ConfirmationConfig {
   question: string;
-  resultOptions: string[];
-  expectedConfirmedResults: string[];
+  flaggedPath: 'yes' | 'no';
 }

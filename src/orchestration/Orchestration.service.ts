@@ -63,11 +63,12 @@ export class OrchestrationService {
         event.platform,
       );
 
-      const { canProcess, credential } = this.verifyPlatform(
-        platform,
-        event.platform,
-        event.channel,
-      );
+      const { canProcess, credential } = this.verifyPlatform({
+        senderId: event.metadata.sender.id,
+        platform: event.platform,
+        clientPlatform: platform,
+        channel: event.channel,
+      });
 
       if (!canProcess || !credential) return;
 
@@ -248,11 +249,17 @@ export class OrchestrationService {
     return selectedAgent;
   }
 
-  verifyPlatform(
-    clientPlatform: ClientPlatformEntity,
-    platform: Platform,
-    channel: PlatformChannel,
-  ): { canProcess: boolean; credential: PlatformCredentialEntity | null } {
+  verifyPlatform({
+    channel,
+    clientPlatform,
+    platform,
+    senderId,
+  }: {
+    senderId: string;
+    clientPlatform: ClientPlatformEntity;
+    platform: Platform;
+    channel: PlatformChannel;
+  }): { canProcess: boolean; credential: PlatformCredentialEntity | null } {
     if (clientPlatform.platform !== platform) {
       this.logger.warn(
         `Client platform ${clientPlatform.platform} does not match event platform ${platform}. Skipping event processing.`,
@@ -274,6 +281,17 @@ export class OrchestrationService {
         `Client platform ${clientPlatform.platform} has an expired credential ${credential.credentialId}. Skipping event processing.`,
       );
       return { canProcess: false, credential: null };
+    }
+
+    // Verify banned senders
+    if (clientPlatform.platformConfig?.bannedSenders) {
+      const bannedSenders = clientPlatform.platformConfig.bannedSenders;
+      if (bannedSenders.includes(senderId)) {
+        this.logger.warn(
+          `Sender ${senderId} is banned for client platform ${clientPlatform.platform}. Skipping event processing.`,
+        );
+        return { canProcess: false, credential: null };
+      }
     }
 
     return { canProcess: true, credential };

@@ -5,6 +5,12 @@ import { ConversationService } from '../../messaging';
 import { GenerationService } from '../../generation';
 import { CommunityManagerHandler } from './CommunityManager.handler';
 import { AgentKey } from '../../generated/prisma/enums';
+import {
+  ClientEntity,
+  ClientPlatformEntity,
+  ConversationEntity,
+  PlatformCredentialEntity,
+} from 'src/types/entities';
 
 @Injectable()
 export class ConfirmationAssistantHandler {
@@ -28,7 +34,14 @@ export class ConfirmationAssistantHandler {
       return;
     }
 
-    const confirmationQuestion = platform.confirmationConfig.question;
+    const confirmConfigs = platform.platformConfig?.confirmation;
+    if (!confirmConfigs) {
+      this.logger.warn(
+        `Confirm Assistant does not have confirmation configuration for platform ${platform.platformId}`,
+      );
+      return;
+    }
+    const { question, flaggedPath } = confirmConfigs;
     const requiredField: RequiredField = {
       key: 'confirms',
       type: 'string',
@@ -40,7 +53,7 @@ export class ConfirmationAssistantHandler {
     const extractedInfo = await this.generationService.extractFieldsFromResponse(
       [requiredField],
       conversation.messages.slice(0, 2), // Only look at the last 2 messages for confirmation
-      `You are confirming the response to the following question: ${confirmationQuestion}. Extract whether the user has confirmed (yes), denied (no), or if the response is unrelated to the confirmation question.`,
+      `You are confirming the response to the following question: ${question}. Extract whether the user has confirmed (yes), denied (no), or if the response is unrelated to the confirmation question.`,
     );
 
     if (!extractedInfo || extractedInfo.length === 0) {
@@ -57,48 +70,31 @@ export class ConfirmationAssistantHandler {
     }
 
     switch (extractedValue.value.toLowerCase()) {
-      case 'yes': {
-        this.logger.log(`User provided confirmation, flagging conversation`);
-        const generatedMessage = await this.generationService.simpleGenerate(
-          `Acknowledge the last response from user and let them know that someone would be in touch on this conversation shortly. Last message: ${lastMessage.content}`,
-        );
-
-        await this.replyAction.execute({
-          platform: conversation.platform,
-          target: targetId,
-          credential,
-          channel: conversation.channel,
-          message: generatedMessage,
-        });
-
-        await this.conversationService.addAgentMessage(
-          conversation,
-          'confirmation_agent',
-          generatedMessage,
-        );
-
-        await this.conversationService.confirmConversation(conversation.conversationId, false);
-        break;
-      }
+      case 'yes':
       case 'no': {
-        this.logger.log(`User denied confirmation, routing to community manager`);
-        await this.conversationService.confirmConversation(conversation.conversationId, true);
-
-        await this.routeToCommunityManager({
-          client,
-          platform,
-          conversation,
-          credential,
-          targetId,
-        });
-
+        if (extractedValue.value.toLowerCase() === flaggedPath) {
+          await this.executeFlaggedPath({
+            conversation,
+            targetId,
+            lastMessageContent: lastMessage.content,
+            credential,
+          });
+        } else {
+          await this.executeConfirmedPath({
+            conversation,
+            targetId,
+            credential,
+            client,
+            platform,
+          });
+        }
         break;
       }
       case 'unrelated': {
         this.logger.log(`No confirmation found in messages, asking for confirmation`);
 
         const generatedReply = await this.generationService.simpleGenerate(
-          `Generate a reply greeting the user and asking them to confirm the following question: ${confirmationQuestion}. Language of the reply should base on the user message.\nThis is the last message received from the user: ${lastMessage.content}. `,
+          `Generate a reply greeting the user and asking them to confirm the following question: ${question}. Language of the reply should base on the user message.\nThis is the last message received from the user: ${lastMessage.content}. `,
         );
 
         await this.replyAction.execute({
@@ -139,5 +135,65 @@ export class ConfirmationAssistantHandler {
       routingContext:
         'Conversation was routed from confirmation assistant. Acknowledge the user and reply accordingly or offer assistance',
     });
+  }
+
+  private async executeConfirmedPath({
+    conversation,
+    targetId,
+    credential,
+    client,
+    platform,
+  }: {
+    conversation: ConversationEntity;
+    targetId: string;
+    client: ClientEntity;
+    platform: ClientPlatformEntity;
+    credential: PlatformCredentialEntity;
+  }) {
+    this.logger.log(`User confirmed conversation, routing to community manager`);
+    await this.conversationService.confirmConversation(conversation.conversationId, true);
+
+    await this.routeToCommunityManager({
+      client,
+      platform,
+      conversation,
+      credential,
+      targetId,
+    });
+  }
+
+  private async executeFlaggedPath({
+    credential,
+    conversation,
+    lastMessageContent,
+    targetId,
+  }: {
+    conversation: ConversationEntity;
+    targetId: string;
+    lastMessageContent: string;
+    credential: PlatformCredentialEntity;
+  }) {
+    this.logger.log(
+      `User denied confirmation, flagging convrsation and notifying user that someone will be in touch shortly`,
+    );
+    const generatedMessage = await this.generationService.simpleGenerate(
+      `Acknowledge the last response from user and let them know that someone would be in touch on this conversation shortly. Last message: ${lastMessageContent}`,
+    );
+
+    await this.replyAction.execute({
+      platform: conversation.platform,
+      target: targetId,
+      credential,
+      channel: conversation.channel,
+      message: generatedMessage,
+    });
+
+    await this.conversationService.addAgentMessage(
+      conversation,
+      'confirmation_agent',
+      generatedMessage,
+    );
+
+    await this.conversationService.confirmConversation(conversation.conversationId, false);
   }
 }

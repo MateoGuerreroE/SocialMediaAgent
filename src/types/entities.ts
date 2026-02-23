@@ -9,7 +9,7 @@ import {
   Platform,
   PlatformChannel,
 } from '../generated/prisma/enums';
-import { AgentConfigOverride, AgentConfiguration, ConfirmationConfig } from './nested';
+import { AgentConfigOverride, AgentConfiguration, PlatformConfig } from './nested';
 
 export interface ClientEntity {
   clientId: string;
@@ -47,7 +47,7 @@ export interface ClientPlatformEntity {
   clientId: string;
   accountId: string;
   requiresConfirmation: boolean;
-  confirmationConfig: ConfirmationConfig;
+  platformConfig: PlatformConfig;
   createdAt: Date;
   updatedAt: Date;
 
