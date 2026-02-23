@@ -85,6 +85,9 @@ export class CommunityManagerHandler {
       );
       return;
     }
+    this.logger.log(
+      `Action ${chosenAction.actionType} selected by model with confidence ${actionDecision.decisionScore}`,
+    );
 
     await this.handleActionExecution({
       action: chosenAction,
@@ -132,6 +135,7 @@ export class CommunityManagerHandler {
           agent,
           credential,
           reason,
+          actions,
           conversation,
           routingContext,
         });
