@@ -9,7 +9,7 @@ import {
   ClientEntity,
   ClientPlatformEntity,
   ConversationEntity,
-  PlatformCredentialEntity,
+  ClientCredentialEntity,
 } from 'src/types/entities';
 
 @Injectable()
@@ -39,6 +39,13 @@ export class ConfirmationAssistantHandler {
       this.logger.warn(
         `Confirm Assistant does not have confirmation configuration for platform ${platform.platformId}`,
       );
+      await this.executeConfirmedPath({
+        conversation,
+        targetId,
+        credential,
+        client,
+        platform,
+      });
       return;
     }
     const { question, flaggedPath } = confirmConfigs;
@@ -65,6 +72,10 @@ export class ConfirmationAssistantHandler {
     }
 
     const extractedValue = extractedInfo[0];
+    this.logger.debug(
+      `Extracted confirmation value: ${JSON.stringify(extractedValue, null, 2)} from message: ${lastMessage.content}`,
+    );
+
     if (extractedValue.confidence < 0.7) {
       extractedValue.value = 'unrelated';
     }
@@ -148,7 +159,7 @@ export class ConfirmationAssistantHandler {
     targetId: string;
     client: ClientEntity;
     platform: ClientPlatformEntity;
-    credential: PlatformCredentialEntity;
+    credential: ClientCredentialEntity;
   }) {
     this.logger.log(`User confirmed conversation, routing to community manager`);
     await this.conversationService.confirmConversation(conversation.conversationId, true);
@@ -171,7 +182,7 @@ export class ConfirmationAssistantHandler {
     conversation: ConversationEntity;
     targetId: string;
     lastMessageContent: string;
-    credential: PlatformCredentialEntity;
+    credential: ClientCredentialEntity;
   }) {
     this.logger.log(
       `User denied confirmation, flagging convrsation and notifying user that someone will be in touch shortly`,

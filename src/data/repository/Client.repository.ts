@@ -39,6 +39,7 @@ export class ClientRepository {
       include: {
         events: includeRelations,
         agents: includeRelations,
+        credentials: includeRelations,
       },
     }) as Promise<ClientEntity | null>;
   }

@@ -6,7 +6,7 @@ import {
   ClientEntity,
   ConversationEntity,
   ConversationMessageEntity,
-  PlatformCredentialEntity,
+  ClientCredentialEntity,
 } from 'src/types/entities';
 import { AgentService } from '../Agent.service';
 import { ConversationService } from 'src/messaging';
@@ -68,7 +68,7 @@ export class CrmIntegrationHandler {
     conversation: ConversationEntity;
     agent: AgentEntity;
     client: ClientEntity;
-    credential: PlatformCredentialEntity;
+    credential: ClientCredentialEntity;
   }) {
     const validAgent = await this.agentService.getAgent(agent.agentId);
     const actions = await this.agentService.getActionsByAgentId(validAgent.agentId);
@@ -260,7 +260,7 @@ export class CrmIntegrationHandler {
     conversation: ConversationEntity;
     agent: AgentEntity;
     targetId: string;
-    credential: PlatformCredentialEntity;
+    credential: ClientCredentialEntity;
   }): Promise<void> {
     const { platform, channel } = conversation;
 
@@ -287,7 +287,7 @@ export class CrmIntegrationHandler {
     agent: AgentEntity;
     client: ClientEntity;
     targetId: string;
-    credential: PlatformCredentialEntity;
+    credential: ClientCredentialEntity;
     action: AgentActionEntity;
     conversation: ConversationEntity;
     session: AgentSessionEntity;
@@ -400,7 +400,7 @@ export class CrmIntegrationHandler {
     crmSubmitter?: AgentActionEntity;
     agent: AgentEntity;
     client: ClientEntity;
-    credential: PlatformCredentialEntity;
+    credential: ClientCredentialEntity;
     conversation: ConversationEntity;
     isInitial?: boolean;
   }): Promise<void> {
@@ -516,7 +516,7 @@ export class CrmIntegrationHandler {
     conversation: ConversationEntity;
     action: AgentActionEntity;
     client: ClientEntity;
-    credential: PlatformCredentialEntity;
+    credential: ClientCredentialEntity;
     targetId: string;
     agent: AgentEntity;
     session: AgentSessionEntity;
@@ -644,7 +644,7 @@ export class CrmIntegrationHandler {
     targetId: string;
     conversation: ConversationEntity;
     agent: AgentEntity;
-    credential: PlatformCredentialEntity;
+    credential: ClientCredentialEntity;
     client: ClientEntity;
   }) {
     const generatedReply = await this.generationService.generateResponseWithClientContext({
@@ -680,7 +680,7 @@ export class CrmIntegrationHandler {
     conversation: ConversationEntity;
     targetId: string;
     client: ClientEntity;
-    credential: PlatformCredentialEntity;
+    credential: ClientCredentialEntity;
     notificationService: AgentActionEntity;
     agent: AgentEntity;
   }): Promise<void> {

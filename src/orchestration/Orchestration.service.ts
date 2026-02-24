@@ -7,7 +7,7 @@ import {
   ClientEntity,
   ClientPlatformEntity,
   ConversationEntity,
-  PlatformCredentialEntity,
+  ClientCredentialEntity,
 } from '../types/entities';
 import { Platform, PlatformChannel } from '../generated/prisma/enums';
 import { GenerationService } from '../generation';
@@ -63,19 +63,23 @@ export class OrchestrationService {
         event.platform,
       );
 
-      const { canProcess, credential } = this.verifyPlatform({
+      const canProcessPlatform = this.verifyPlatform({
         senderId: event.metadata.sender.id,
         platform: event.platform,
         clientPlatform: platform,
+      });
+
+      if (!canProcessPlatform) return;
+
+      const client = await this.clientService.getClientById(platform.clientId);
+
+      const { canProcess, credential } = this.verifyClient({
+        client,
+        platform: event.platform,
         channel: event.channel,
       });
 
       if (!canProcess || !credential) return;
-
-      const client = await this.clientService.getClientById(platform.clientId);
-
-      const canClientProcess = this.verifyClient(client);
-      if (!canClientProcess) return;
 
       const conversation = await this.conversationService.getOrCreateConversation(
         event,
@@ -85,31 +89,35 @@ export class OrchestrationService {
       const canConversationProcess = await this.verifyConversation(conversation);
       if (!canConversationProcess) return;
 
+      if (conversation.isConfirmed === false) {
+        this.logger.warn(
+          `Conversation ${conversation.conversationId} has been flagged as not confirmed. Skipping processing.`,
+        );
+        return;
+      }
+
       if (event.channel === PlatformChannel.DIRECT_MESSAGE) {
         await this.bufferDMMessageForConversation(conversation, event);
       }
       await this.conversationService.addUserMessage(conversation, event);
 
-      if (platform.requiresConfirmation) {
-        if (conversation.isConfirmed === null) {
-          this.logger.warn(
-            `Client requires confirmation for platform and received conversation is not confirmed. Routing to assistant`,
-          );
-          await this.agentConfirmAssistantQueue.add('handleConfirmation', {
+      if (platform.requiresConfirmation && conversation.isConfirmed === null) {
+        this.logger.warn(
+          `Client requires confirmation for platform and received conversation is not confirmed. Routing to assistant`,
+        );
+        await this.agentConfirmAssistantQueue.add(
+          'handleConfirmation',
+          {
             conversation,
             client,
             platform,
             credential,
             targetId: event.targetId,
-          });
+          },
+          { jobId: Utils.generateUUID(), removeOnComplete: { age: 60 } },
+        );
 
-          return;
-        } else if (conversation.isConfirmed === false) {
-          this.logger.warn(
-            `Conversation ${conversation.conversationId} has been flagged as not confirmed. Skipping processing.`,
-          );
-          return;
-        }
+        return;
       }
 
       const selectedAgent = await this.requireAgentDecision({
@@ -148,7 +156,7 @@ export class OrchestrationService {
     agent: AgentEntity;
     conversation: ConversationEntity;
     client: ClientEntity;
-    credential: PlatformCredentialEntity;
+    credential: ClientCredentialEntity;
     targetId: string;
   }) {
     const payload: WorkerJobData = {
@@ -250,7 +258,6 @@ export class OrchestrationService {
   }
 
   verifyPlatform({
-    channel,
     clientPlatform,
     platform,
     senderId,
@@ -258,93 +265,80 @@ export class OrchestrationService {
     senderId: string;
     clientPlatform: ClientPlatformEntity;
     platform: Platform;
-    channel: PlatformChannel;
-  }): { canProcess: boolean; credential: PlatformCredentialEntity | null } {
+  }): boolean {
     if (clientPlatform.platform !== platform) {
       this.logger.warn(
         `Client platform ${clientPlatform.platform} does not match event platform ${platform}. Skipping event processing.`,
       );
-      return { canProcess: false, credential: null };
+      return false;
     }
 
-    const requiredCredential = Utils.resolveRequiredCredential(platform, channel);
-    const credential = clientPlatform.credentials?.find((cred) => cred.type === requiredCredential);
-    if (!credential) {
-      this.logger.warn(
-        `Client platform ${clientPlatform.platform} does not have the required credential ${requiredCredential} for channel ${channel}. Skipping event processing.`,
-      );
-      return { canProcess: false, credential: null };
-    }
-
-    if (credential.expiresAt && credential.expiresAt < new Date()) {
-      this.logger.warn(
-        `Client platform ${clientPlatform.platform} has an expired credential ${credential.credentialId}. Skipping event processing.`,
-      );
-      return { canProcess: false, credential: null };
-    }
-
-    // Verify banned senders
     if (clientPlatform.platformConfig?.bannedSenders) {
       const bannedSenders = clientPlatform.platformConfig.bannedSenders;
       if (bannedSenders.includes(senderId)) {
         this.logger.warn(
           `Sender ${senderId} is banned for client platform ${clientPlatform.platform}. Skipping event processing.`,
         );
-        return { canProcess: false, credential: null };
+        return false;
       }
     }
 
-    return { canProcess: true, credential };
+    return true;
   }
 
-  verifyClient(client: ClientEntity): boolean {
+  verifyClient({
+    client,
+    platform,
+    channel,
+  }: {
+    client: ClientEntity;
+    platform: Platform;
+    channel: PlatformChannel;
+  }): {
+    canProcess: boolean;
+    credential: ClientCredentialEntity | null;
+  } {
     const { businessName, isActive } = client;
 
     if (!isActive) {
       this.logger.warn(`Client ${businessName} is inactive. Skipping event processing.`);
-      return false;
+      return { canProcess: false, credential: null };
     }
 
-    // const targetPlatform = platforms.find((p) => p.platform === platform);
+    const credentials = client.credentials || [];
+    const requiredCredential = Utils.resolveRequiredCredential(platform, channel);
 
-    // if (!targetPlatform) {
-    //   this.logger.warn(
-    //     `Client ${businessName} does not have a ${platform} account configured. Skipping event processing.`,
-    //   );
-    //   return false;
-    // }
+    const validCredential = credentials.find((cred) => cred.type === requiredCredential);
 
-    // // Check credentials exist
-    // if (!targetPlatform.credentials.length) {
-    //   this.logger.warn(
-    //     `Client ${businessName} does not have any credentials configured or they are expired. Skipping event processing.`,
-    //   );
-    //   return false;
-    // }
+    if (!validCredential) {
+      this.logger.warn(
+        `Client ${businessName} does not have the required credential ${requiredCredential} for platform ${platform} and channel ${channel}. Skipping event processing.`,
+      );
+      return { canProcess: false, credential: null };
+    }
 
-    // const requiredCredential = Utils.resolveRequiredCredential(platform, channel);
-    // if (!targetPlatform.credentials.some((cred) => cred.type === requiredCredential)) {
-    //   this.logger.warn(
-    //     `Client ${businessName} does not have the required credential ${requiredCredential} for platform ${platform} and channel ${channel}. Skipping event processing.`,
-    //   );
-    //   return false;
-    // }
+    if (validCredential.expiresAt && validCredential.expiresAt < new Date()) {
+      this.logger.warn(
+        `Client ${businessName} has an expired credential ${validCredential.credentialId}. Skipping event processing.`,
+      );
+      return { canProcess: false, credential: null };
+    }
 
     if (!client.agents || client.agents.length === 0) {
       this.logger.warn(
         `Client ${businessName} does not have any agents configured. Skipping event processing.`,
       );
-      return false;
+      return { canProcess: false, credential: null };
     }
 
     if (!client.agents.some((agent) => agent.isActive)) {
       this.logger.warn(
         `Client ${businessName} does not have any active agents. Skipping event processing.`,
       );
-      return false;
+      return { canProcess: false, credential: null };
     }
 
-    return true;
+    return { canProcess: true, credential: validCredential };
   }
 
   async verifyConversation(conversation: ConversationEntity): Promise<boolean> {

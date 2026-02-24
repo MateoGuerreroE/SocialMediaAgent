@@ -7,6 +7,7 @@ import {
   IsDateString,
   IsUUID,
   IsBoolean,
+  IsObject,
 } from 'class-validator';
 import { CredentialType, Platform } from '../../generated/prisma/enums';
 
@@ -134,6 +135,10 @@ export class CreateClientPlatformDTO {
   @IsBoolean()
   requiresConfirmation?: boolean;
 
+  @IsObject()
+  @IsNotEmpty()
+  platformConfig: Record<string, any>;
+
   @IsOptional()
   @IsString()
   confirmQuestion?: string;
@@ -145,7 +150,7 @@ export interface CreateClientPlatform extends CreateClientPlatformDTO {
 export class CreateCredentialDTO {
   @IsUUID()
   @IsNotEmpty()
-  platformId: string;
+  clientId: string;
 
   @IsString()
   @IsNotEmpty()

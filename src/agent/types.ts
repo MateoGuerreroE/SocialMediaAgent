@@ -3,13 +3,13 @@ import {
   ClientEntity,
   ClientPlatformEntity,
   ConversationEntity,
-  PlatformCredentialEntity,
+  ClientCredentialEntity,
 } from 'src/types/entities';
 
 export interface WorkerJobData {
   client: ClientEntity;
   targetId: string;
-  credential: PlatformCredentialEntity;
+  credential: ClientCredentialEntity;
   conversation: ConversationEntity;
   agent: AgentEntity;
 }
@@ -32,6 +32,6 @@ export interface ConfirmationAssistantData {
   platform: ClientPlatformEntity;
   client: ClientEntity;
   targetId: string;
-  credential: PlatformCredentialEntity;
+  credential: ClientCredentialEntity;
   conversation: ConversationEntity;
 }

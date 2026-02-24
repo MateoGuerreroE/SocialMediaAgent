@@ -9,4 +9,4 @@ export * from './AgentAction.repository';
 export * from './AgentPolicy.repository';
 export * from './AgentSession.repository';
 export * from './AgentVariant.repository';
-export * from './PlatformCredential.repository';
+export * from './ClientCredential.repository';

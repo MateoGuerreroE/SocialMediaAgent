@@ -180,7 +180,18 @@ export class ClientService {
     });
   }
 
-  async getAllClientWhatsappPlatforms(): Promise<ClientPlatformEntity[]> {
-    return this.clientPlatformRepository.getAllPlatformsByPlatform(Platform.WHATSAPP);
+  async getAllClientsWithWhatsappPlatform(): Promise<ClientEntity[]> {
+    const platforms = await this.clientPlatformRepository.getAllPlatformsByPlatform(
+      Platform.WHATSAPP,
+    );
+    const clients: ClientEntity[] = [];
+    for (const platform of platforms) {
+      const client = await this.getClientById(platform.clientId);
+      clients.push({
+        ...client,
+        platforms: [platform],
+      });
+    }
+    return clients;
   }
 }

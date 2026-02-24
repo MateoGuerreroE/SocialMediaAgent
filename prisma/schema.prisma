@@ -132,28 +132,28 @@ model Client {
   updatedAt           DateTime @updatedAt
 
   // Relations
-  events    ClientEvent[]
-  agents    ClientAgent[]
-  platforms ClientPlatform[]
+  events      ClientEvent[]
+  agents      ClientAgent[]
+  platforms   ClientPlatform[]
+  credentials ClientCredential[]
 }
 
 model ClientPlatform {
-  platformId           String               @id @default(uuid())
+  platformId           String   @id @default(uuid())
   platform             Platform
   clientId             String
   accountId            String
-  requiresConfirmation Boolean              @default(false)
-  platformConfig       Json                 @db.JsonB
+  requiresConfirmation Boolean  @default(false)
+  platformConfig       Json     @db.JsonB
   // Timestamps
-  createdAt            DateTime             @default(now())
-  updatedAt            DateTime             @updatedAt
-  client               Client               @relation(fields: [clientId], references: [clientId])
-  credentials          PlatformCredential[]
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  client               Client   @relation(fields: [clientId], references: [clientId])
 }
 
-model PlatformCredential {
+model ClientCredential {
   credentialId String         @id @default(uuid())
-  platformId   String
+  clientId     String
   type         CredentialType
   value        String
   expiresAt    DateTime?
@@ -162,7 +162,7 @@ model PlatformCredential {
   updatedAt    DateTime       @updatedAt
 
   // Relations
-  platform ClientPlatform @relation(fields: [platformId], references: [platformId])
+  client Client @relation(fields: [clientId], references: [clientId])
 }
 
 model ClientEvent {

@@ -27,6 +27,7 @@ export interface ClientEntity {
   events?: ClientEventEntity[];
   platforms?: ClientPlatformEntity[];
   agents?: AgentEntity[];
+  credentials?: ClientCredentialEntity[];
 }
 
 export interface ClientEventEntity {
@@ -50,13 +51,11 @@ export interface ClientPlatformEntity {
   platformConfig: PlatformConfig;
   createdAt: Date;
   updatedAt: Date;
-
-  credentials?: PlatformCredentialEntity[];
 }
 
-export interface PlatformCredentialEntity {
+export interface ClientCredentialEntity {
   credentialId: string;
-  platformId: string;
+  clientId: string;
   type: CredentialType;
   value: string;
   expiresAt: Date | null;

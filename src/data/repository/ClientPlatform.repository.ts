@@ -17,9 +17,6 @@ export class ClientPlatformRepository {
   async getAllPlatformsByPlatform(platform: Platform): Promise<ClientPlatformEntity[]> {
     return (await this.prisma.clientPlatform.findMany({
       where: { platform },
-      include: {
-        credentials: true,
-      },
     })) as unknown as ClientPlatformEntity[];
   }
 
@@ -46,9 +43,6 @@ export class ClientPlatformRepository {
       where: {
         platform,
         accountId,
-      },
-      include: {
-        credentials: true,
       },
     })) as unknown as ClientPlatformEntity | null;
   }

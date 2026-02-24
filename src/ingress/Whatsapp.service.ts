@@ -17,7 +17,7 @@ import { Queue } from 'bullmq';
 import { ClientService } from 'src/client';
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { ConfigService } from '@nestjs/config';
-import { ClientPlatformEntity, PlatformCredentialEntity } from 'src/types/entities';
+import { ClientCredentialEntity, ClientEntity } from 'src/types/entities';
 import {
   CredentialType,
   MessageSource,
@@ -82,46 +82,44 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit() {
-    const whatsappPlatforms = await this.clientService.getAllClientWhatsappPlatforms();
-    if (whatsappPlatforms.length === 0) {
+    const whatsappClients = await this.clientService.getAllClientsWithWhatsappPlatform();
+    if (whatsappClients.length === 0) {
       this.logger.warn('No clients with active WhatsApp integrations found on startup.');
       return;
     }
 
     this.logger.debug(
-      `Clients with WhatsApp integrations found: ${whatsappPlatforms.map((p) => p.clientId).join(', ')}`,
+      `Clients with WhatsApp integrations found: ${whatsappClients.map((p) => p.clientId).join(', ')}`,
     );
 
-    for (const platform of whatsappPlatforms) {
-      await this.attemptInitializeExistentClient(platform);
+    for (const client of whatsappClients) {
+      await this.attemptInitializeExistentClient(client);
     }
   }
 
-  private async attemptInitializeExistentClient(platform: ClientPlatformEntity) {
-    if (this.sockets.has(platform.platformId)) {
-      this.logger.warn(`Platform ${platform.platformId} already initialized, skipping.`);
+  private async attemptInitializeExistentClient(client: ClientEntity) {
+    if (this.sockets.has(client.clientId)) {
+      this.logger.warn(`Client ${client.clientId} already initialized, skipping.`);
       return;
     }
 
-    const whatsappCredential = platform.credentials?.find(
+    const whatsappCredential = client.credentials?.find(
       (cred) => cred.type === CredentialType.WHATSAPP_BUCKET,
     );
 
     if (!whatsappCredential || !whatsappCredential.value) {
       this.logger.warn(
-        `Platform ${platform.platformId} has no WhatsApp credentials, skipping initialization.`,
+        `Client ${client.clientId} has no WhatsApp credentials, skipping initialization.`,
       );
       return;
     }
 
     try {
-      this.logger.debug(
-        `Attempting to initialize WhatsApp client for platform ${platform.platformId}`,
-      );
-      await this.connect(platform, whatsappCredential);
+      this.logger.debug(`Attempting to initialize WhatsApp client for client ${client.clientId}`);
+      await this.connect(client, whatsappCredential);
     } catch (e) {
       this.logger.error(
-        `Failed to initialize WhatsApp client for platform ${platform.platformId}: ${e.message}`,
+        `Failed to initialize WhatsApp client for client ${client.clientId}: ${e.message}`,
       );
     }
   }
@@ -133,52 +131,52 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  getSocket(platformId: string): WASocket | null {
-    return this.sockets.get(platformId) ?? null;
+  getSocket(clientId: string): WASocket | null {
+    return this.sockets.get(clientId) ?? null;
   }
 
   /**
    * Initiate connection and return QR code for scanning.
    * Use this from API endpoints to onboard new clients.
    */
-  async initiateConnection(platformId: string): Promise<{ qr?: string; status: string }> {
-    if (this.sockets.has(platformId)) {
+  async initiateConnection(clientId: string): Promise<{ qr?: string; status: string }> {
+    if (this.sockets.has(clientId)) {
       return { status: 'already_connected' };
     }
 
-    const platform = await this.clientService.getPlatformById(platformId);
+    const client = await this.clientService.getClientById(clientId);
 
-    const credential = platform.credentials?.find(
+    const credential = client.credentials?.find(
       (cred) => cred.type === CredentialType.WHATSAPP_BUCKET,
     );
 
     if (!credential || !credential.value) {
       throw new NotFoundError(
-        `WhatsApp credential for platform ${platformId} not found. Please set up credentials before connecting.`,
+        `WhatsApp credential for client ${clientId} not found. Please set up credentials before connecting.`,
       );
     }
 
     return new Promise((resolve) => {
-      this.qrResolvers.set(platformId, (qr: string) => {
+      this.qrResolvers.set(clientId, (qr: string) => {
         resolve({ qr, status: 'qr_generated' });
       });
 
       // Start connection - QR will be captured in connection.update handler
-      this.connect(platform, credential).catch((err) => {
-        this.qrResolvers.delete(platformId);
+      this.connect(client, credential).catch((err) => {
+        this.qrResolvers.delete(clientId);
         throw err;
       });
 
       // Timeout after 30 seconds if no QR
       setTimeout(() => {
-        if (this.qrResolvers.has(platformId)) {
-          this.qrResolvers.delete(platformId);
+        if (this.qrResolvers.has(clientId)) {
+          this.qrResolvers.delete(clientId);
           // Clean up the socket if still connecting
-          const sock = this.sockets.get(platformId);
-          if (sock && this.status.get(platformId) !== 'open') {
+          const sock = this.sockets.get(clientId);
+          if (sock && this.status.get(clientId) !== 'open') {
             sock.end(new Error('QR timeout'));
-            this.sockets.delete(platformId);
-            this.status.delete(platformId);
+            this.sockets.delete(clientId);
+            this.status.delete(clientId);
           }
           resolve({ status: 'timeout' });
         }
@@ -190,13 +188,13 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
    * Internal connection method - handles socket creation and events.
    */
   private async connect(
-    platform: ClientPlatformEntity,
-    credential: PlatformCredentialEntity,
+    client: ClientEntity,
+    credential: ClientCredentialEntity,
   ): Promise<WASocket> {
-    const platformId = platform.platformId;
-    if (this.sockets.has(platformId)) return this.sockets.get(platformId)!;
+    const { clientId } = client;
+    if (this.sockets.has(clientId)) return this.sockets.get(clientId)!;
 
-    this.status.set(platformId, 'connecting');
+    this.status.set(clientId, 'connecting');
 
     const { state, saveCreds } = await this.getAuth(credential.value);
     const { version } = await fetchLatestBaileysVersion();
@@ -217,13 +215,13 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       const { connection, lastDisconnect, qr } = u;
 
       if (qr) {
-        this.logger.warn(`[${platformId}] QR generated`);
+        this.logger.warn(`[${clientId}] QR generated`);
 
         // If there's a pending resolver (from API call), send QR to it
-        const resolver = this.qrResolvers.get(platformId);
+        const resolver = this.qrResolvers.get(clientId);
         if (resolver) {
           resolver(qr);
-          this.qrResolvers.delete(platformId);
+          this.qrResolvers.delete(clientId);
         } else {
           // Fallback: print to terminal (for onModuleInit flows)
           qrcode.generate(qr, { small: true });
@@ -231,12 +229,12 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       }
 
       if (connection === 'open') {
-        this.status.set(platformId, 'open');
-        this.logger.log(`✅ [${platformId}] WhatsApp connected`);
+        this.status.set(clientId, 'open');
+        this.logger.log(`✅ [${clientId}] WhatsApp connected`);
       }
 
       if (connection === 'close') {
-        this.status.set(platformId, 'closed');
+        this.status.set(clientId, 'closed');
 
         const code = (lastDisconnect?.error as any)?.output?.statusCode;
         const loggedOut = code === DisconnectReason.loggedOut;
@@ -244,14 +242,14 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
           code === DisconnectReason.badSession || code === DisconnectReason.connectionReplaced;
 
         this.logger.warn(
-          `⚠️ [${platformId}] connection closed (loggedOut=${loggedOut}, code=${code})`,
+          `⚠️ [${clientId}] connection closed (loggedOut=${loggedOut}, code=${code})`,
         );
 
-        this.sockets.delete(platformId);
+        this.sockets.delete(clientId);
 
         // Only auto-reconnect for network issues, not auth failures
         if (!loggedOut && !authFailure) {
-          setTimeout(() => this.connect(platform, credential), 1500);
+          setTimeout(() => this.connect(client, credential), 1500);
         }
       }
     });
@@ -267,9 +265,17 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
         }
       }
 
+      const platforms = client.platforms?.filter((p) => p.platform === Platform.WHATSAPP);
+      if (!platforms || platforms.length === 0) {
+        this.logger.warn(
+          `Received WhatsApp message for client ${clientId} which has no active WhatsApp platform. Ignoring.`,
+        );
+        return;
+      }
+
       const parsed = this.mapToSocialMediaEvent({
         msg: messages[0],
-        accountId: platform.accountId,
+        accountId: platforms[0].accountId,
       });
       if (parsed) {
         this.logger.log(`Received whatsapp message`);
@@ -278,28 +284,28 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       }
     });
 
-    this.sockets.set(platformId, sock);
+    this.sockets.set(clientId, sock);
     return sock;
   }
 
-  getStatus(platformId: string) {
-    return this.status.get(platformId) ?? 'closed';
+  getStatus(clientId: string) {
+    return this.status.get(clientId) ?? 'closed';
   }
 
-  disconnect(platformId: string) {
-    const sock = this.sockets.get(platformId);
+  disconnect(clientId: string) {
+    const sock = this.sockets.get(clientId);
     if (!sock) return;
     try {
       sock.end(new Error('Manual disconnect'));
     } finally {
-      this.sockets.delete(platformId);
-      this.status.set(platformId, 'closed');
+      this.sockets.delete(clientId);
+      this.status.set(clientId, 'closed');
     }
   }
 
   onModuleDestroy() {
-    for (const [platformId] of this.sockets.entries()) {
-      this.disconnect(platformId);
+    for (const [clientId] of this.sockets.entries()) {
+      this.disconnect(clientId);
     }
   }
 

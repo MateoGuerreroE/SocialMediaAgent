@@ -4,7 +4,7 @@ import {
   AgentEntity,
   ClientEntity,
   ConversationEntity,
-  PlatformCredentialEntity,
+  ClientCredentialEntity,
 } from 'src/types/entities';
 import { AgentService } from '../Agent.service';
 import { Utils } from 'src/utils';
@@ -18,7 +18,7 @@ type CMHandlerContext = {
   client: ClientEntity;
   conversation: ConversationEntity;
   agent: AgentEntity;
-  credential: PlatformCredentialEntity;
+  credential: ClientCredentialEntity;
   targetId: string;
   routingContext?: string;
 };
@@ -168,7 +168,7 @@ export class CommunityManagerHandler {
     targetId: string;
     conversation: ConversationEntity;
     agent: AgentEntity;
-    credential: PlatformCredentialEntity;
+    credential: ClientCredentialEntity;
     routingContext?: string;
   }) {
     const agentConfig = agent.configuration;
@@ -208,7 +208,7 @@ export class CommunityManagerHandler {
     client: ClientEntity;
     conversation: ConversationEntity;
     reason?: string;
-    credential: PlatformCredentialEntity;
+    credential: ClientCredentialEntity;
     action: AgentActionEntity;
     actions?: AgentActionEntity[];
     routingContext?: string;
@@ -273,7 +273,7 @@ export class CommunityManagerHandler {
     agent: AgentEntity;
     targetId: string;
     reason?: string;
-    credential: PlatformCredentialEntity;
+    credential: ClientCredentialEntity;
     actions?: AgentActionEntity[];
   }) {
     try {
