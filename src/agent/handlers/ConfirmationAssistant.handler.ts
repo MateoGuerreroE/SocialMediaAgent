@@ -72,9 +72,6 @@ export class ConfirmationAssistantHandler {
     }
 
     const extractedValue = extractedInfo[0];
-    this.logger.debug(
-      `Extracted confirmation value: ${JSON.stringify(extractedValue, null, 2)} from message: ${lastMessage.content}`,
-    );
 
     if (extractedValue.confidence < 0.7) {
       extractedValue.value = 'unrelated';
