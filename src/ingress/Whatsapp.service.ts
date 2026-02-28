@@ -279,6 +279,9 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       });
       if (parsed) {
         this.logger.log(`Received whatsapp message`);
+        if (parsed.metadata.source === MessageSource.AD) {
+          this.logger.debug(`AD MESSAGE: ${JSON.stringify(parsed, null, 2)}`);
+        }
         await this.sendToOrchestration(parsed);
         return;
       }
@@ -432,9 +435,11 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       return null;
     }
 
-    if (!msg.message?.conversation && !msg.message?.protocolMessage) {
-      this.logger.warn('Received unsupported whatsapp message type, skipping.');
-      this.logger.debug(`Unsupported message: ${JSON.stringify(msg, null, 2)}`);
+    const { isValid, isAds } = this.verifyValidMessage(msg);
+
+    if (!isValid) {
+      this.logger.warn('Received unsupported message type, skipping.');
+      this.logger.debug(`Unsupported message details: ${JSON.stringify(msg)}`);
       return null;
     }
 
@@ -463,14 +468,14 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       timestamp: msg.messageTimestamp ? Number(msg.messageTimestamp) : Date.now(),
       content: {
         originalType: OriginalContentType.TEXT,
-        text: msg.message.conversation || '',
+        text: msg.message?.conversation || '',
       },
       accountId,
       targetId,
       messageId,
       metadata: {
         externalId: isDeleted ? (msg.message?.protocolMessage?.key?.id ?? '') : (msg.key?.id ?? ''),
-        source: MessageSource.DIRECT,
+        source: isAds ? MessageSource.AD : MessageSource.DIRECT,
         sender: {
           id: phoneOrId,
           name: undefined,
@@ -496,5 +501,27 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       // Pass through all other console.info calls
       originalInfo.apply(console, args);
     };
+  }
+
+  private verifyValidMessage(msg: proto.IWebMessageInfo): { isValid: boolean; isAds: boolean } {
+    if (!msg.message) return { isValid: false, isAds: false };
+
+    if (msg.message.conversation || msg.message.protocolMessage) {
+      return { isValid: true, isAds: false };
+    }
+
+    if (msg.message.extendedTextMessage?.text) {
+      const source = (
+        msg.message.extendedTextMessage.contextInfo?.conversionSource ?? ''
+      ).toLowerCase();
+
+      if (source.includes('ad')) {
+        msg.message.conversation = msg.message.extendedTextMessage.text;
+
+        return { isValid: true, isAds: true };
+      }
+    }
+
+    return { isValid: false, isAds: false };
   }
 }
