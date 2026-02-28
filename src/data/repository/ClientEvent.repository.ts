@@ -26,4 +26,10 @@ export class ClientEventRepository {
       data: updateData,
     });
   }
+
+  async deleteEvent(eventId: string): Promise<void> {
+    await this.prisma.clientEvent.delete({
+      where: { eventId },
+    });
+  }
 }

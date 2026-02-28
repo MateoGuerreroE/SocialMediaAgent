@@ -7,6 +7,12 @@ import { ClientCredentialEntity } from '../../types/entities';
 export class ClientCredentialRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  async getCredentialById(credentialId: string): Promise<ClientCredentialEntity | null> {
+    return await this.prisma.clientCredential.findUnique({
+      where: { credentialId },
+    });
+  }
+
   async createCredential(entity: CreateCredential): Promise<ClientCredentialEntity> {
     return await this.prisma.clientCredential.create({
       data: entity,
@@ -18,6 +24,12 @@ export class ClientCredentialRepository {
     await this.prisma.clientCredential.update({
       where: { credentialId },
       data: updateData,
+    });
+  }
+
+  async deleteCredential(credentialId: string): Promise<void> {
+    await this.prisma.clientCredential.delete({
+      where: { credentialId },
     });
   }
 }

@@ -3,15 +3,18 @@ import {
   ClientPlatformRepository,
   ClientEventRepository,
   ClientRepository,
+  ClientCredentialRepository,
 } from '../data/repository';
 import {
   CreateClient,
   CreateClientDTO,
   CreateClientEventDTO,
   CreateClientPlatformDTO,
+  CreateCredentialDTO,
   UpdateClientEventDTO,
   UpdateClientPayload,
   UpdateClientPlatformDTO,
+  UpdateCredentialDTO,
 } from '../types/transactions';
 import { ConflictError, NotFoundError } from '../types/errors';
 import { Platform } from '../generated/prisma/enums';
@@ -25,8 +28,14 @@ export class ClientService {
     private readonly clientPlatformRepository: ClientPlatformRepository,
     private readonly clientEventRepository: ClientEventRepository,
     private readonly clientCacheService: ClientCacheService,
+    private readonly clientCredentialRepository: ClientCredentialRepository,
     private readonly logger: ConsoleLogger,
   ) {}
+
+  async getAllClients(): Promise<ClientEntity[]> {
+    const clients = await this.clientRepository.getAllClients();
+    return clients;
+  }
 
   async createClient(dto: CreateClientDTO) {
     await this.verifyClientDoesNotExist(dto);
@@ -55,7 +64,19 @@ export class ClientService {
       ...updates,
     });
 
-    await this.clientCacheService.invalidate(client);
+    await this.clientCacheService.invalidate(client.clientId);
+  }
+
+  async getCompleteClientById(clientId: string): Promise<ClientEntity> {
+    const client = await this.clientRepository.getClientById(clientId, true);
+    if (!client) {
+      throw new NotFoundError(`Client with ID ${clientId} not found.`);
+    }
+    const platforms = await this.clientPlatformRepository.getAllPlatformsByClientId(clientId);
+    return {
+      ...client,
+      platforms,
+    };
   }
 
   private async verifyClientDoesNotExist({ businessName }: { businessName: string }) {
@@ -84,6 +105,41 @@ export class ClientService {
     return client;
   }
 
+  // Credentials
+  async updateClientCredential(credentialId: string, updates: UpdateCredentialDTO) {
+    const credential = await this.clientCredentialRepository.getCredentialById(credentialId);
+    if (!credential) {
+      throw new NotFoundError(`Client credential with ID ${credentialId} not found.`);
+    }
+    await this.clientCredentialRepository.updateCredential({
+      credentialId,
+      ...updates,
+    });
+  }
+
+  async createClientCredential(dto: CreateCredentialDTO) {
+    const { clientId } = dto;
+    const client = await this.clientRepository.getClientById(clientId, false);
+    if (!client) {
+      throw new NotFoundError(`Client with ID ${clientId} not found.`);
+    }
+
+    const credentialId = crypto.randomUUID();
+    return this.clientCredentialRepository.createCredential({
+      credentialId,
+      ...dto,
+    });
+  }
+
+  async deleteCredential(credentialId: string) {
+    const credential = await this.clientCredentialRepository.getCredentialById(credentialId);
+    if (!credential) {
+      throw new NotFoundError(`Client credential with ID ${credentialId} not found.`);
+    }
+    await this.clientCredentialRepository.deleteCredential(credentialId);
+  }
+
+  // Platform
   async getPlatformByAccountId(
     accountId: string,
     platform: Platform,
@@ -162,10 +218,13 @@ export class ClientService {
 
     const eventId = crypto.randomUUID();
 
-    return this.clientEventRepository.createEvent({
-      clientEventId: eventId,
+    const event = await this.clientEventRepository.createEvent({
+      eventId,
       ...dto,
     });
+
+    await this.clientCacheService.invalidate(client.clientId);
+    return event;
   }
 
   async updateClientEvent(eventId: string, updates: UpdateClientEventDTO) {
@@ -178,8 +237,20 @@ export class ClientService {
       clientEventId: eventId,
       ...updates,
     });
+
+    await this.clientCacheService.invalidate(event.clientId);
   }
 
+  async deleteEvent(eventId: string) {
+    const event = await this.clientEventRepository.getEventById(eventId);
+    if (!event) {
+      throw new NotFoundError(`Client event with ID ${eventId} not found.`);
+    }
+
+    await this.clientEventRepository.deleteEvent(eventId);
+  }
+
+  // Whatsapp specific
   async getAllClientsWithWhatsappPlatform(): Promise<ClientEntity[]> {
     const platforms = await this.clientPlatformRepository.getAllPlatformsByPlatform(
       Platform.WHATSAPP,

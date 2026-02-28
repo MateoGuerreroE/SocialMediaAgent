@@ -65,11 +65,11 @@ export class ClientCacheService {
     }
   }
 
-  async invalidate(client: ClientEntity): Promise<void> {
+  async invalidate(clientId: string): Promise<void> {
     try {
-      const key = this.buildKey(client.clientId);
+      const key = this.buildKey(clientId);
       await this.redis.del(key);
-      this.logger.log(`Cache INVALIDATED for client:${client.clientId}`);
+      this.logger.log(`Cache INVALIDATED for client:${clientId}`);
     } catch (error) {
       this.logger.error(
         `Cache INVALIDATE error: ${error instanceof Error ? error.message : error}`,

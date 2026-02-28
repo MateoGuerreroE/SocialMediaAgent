@@ -100,18 +100,6 @@ export class UpdateClientDTO {
   @IsString()
   @IsOptional()
   dynamicInformation?: string;
-
-  @IsString()
-  @IsOptional()
-  instagramAccountId?: string;
-
-  @IsString()
-  @IsOptional()
-  facebookAccountId?: string;
-
-  @IsString()
-  @IsOptional()
-  whatsappNumber?: string;
 }
 
 export interface UpdateClientPayload extends UpdateClientDTO {
@@ -233,7 +221,7 @@ export class CreateClientEventDTO {
 }
 
 export interface CreateClientEvent extends CreateClientEventDTO {
-  clientEventId: string;
+  eventId: string;
 }
 
 export class UpdateClientEventDTO {

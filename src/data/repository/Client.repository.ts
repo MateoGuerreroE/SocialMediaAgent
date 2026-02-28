@@ -7,6 +7,10 @@ import { CreateClient, UpdateClientPayload } from '../../types/transactions';
 export class ClientRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  async getAllClients(): Promise<ClientEntity[]> {
+    return this.prisma.client.findMany();
+  }
+
   async createClient(clientData: CreateClient): Promise<ClientEntity> {
     return this.prisma.client.create({
       data: clientData,
