@@ -434,6 +434,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
 
     if (!msg.message?.conversation && !msg.message?.protocolMessage) {
       this.logger.warn('Received unsupported whatsapp message type, skipping.');
+      this.logger.debug(`Unsupported message: ${JSON.stringify(msg, null, 2)}`);
       return null;
     }
 

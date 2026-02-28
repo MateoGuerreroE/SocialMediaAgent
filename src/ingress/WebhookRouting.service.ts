@@ -118,7 +118,7 @@ export class WebhookRoutingService {
       return this.parseDMEvent(messageId, payload, Platform.INSTAGRAM);
     }
 
-    throw new Error('Unsupported Instagram message type');
+    throw new Error('Unsupported Instagram message type: ' + JSON.stringify(payload, null, 2));
   }
 
   private parseFacebookEvent(payload: FacebookEvent): SocialMediaEvent | null {
