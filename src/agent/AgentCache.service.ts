@@ -1,6 +1,7 @@
 import { ConsoleLogger, Injectable } from '@nestjs/common';
 import { RedisService } from 'src/data';
 import { AgentActionEntity, AgentEntity } from 'src/types/entities';
+import { AgentActionType } from '../generated/prisma/enums';
 
 @Injectable()
 export class AgentCacheService {
@@ -37,7 +38,7 @@ export class AgentCacheService {
     }
   }
 
-  async getAgentActions(agentId: string): Promise<AgentActionEntity[] | null> {
+  async getAgentActions(agentId: string): Promise<AgentActionEntity<AgentActionType>[] | null> {
     try {
       const key = this.buildActionsKey(agentId);
       const cached = await this.redis.get(key);
@@ -46,7 +47,7 @@ export class AgentCacheService {
         return null;
       }
 
-      return JSON.parse(cached) as AgentActionEntity[];
+      return JSON.parse(cached) as AgentActionEntity<AgentActionType>[];
     } catch (error) {
       this.logger.error(
         `Agent actions cache GET error: ${error instanceof Error ? error.message : error}`,
@@ -55,7 +56,10 @@ export class AgentCacheService {
     }
   }
 
-  async setAgentActions(agentId: string, actions: AgentActionEntity[]): Promise<void> {
+  async setAgentActions(
+    agentId: string,
+    actions: AgentActionEntity<AgentActionType>[],
+  ): Promise<void> {
     try {
       const key = this.buildActionsKey(agentId);
       await this.redis.setex(key, this.ACTIONS_TTL, JSON.stringify(actions));

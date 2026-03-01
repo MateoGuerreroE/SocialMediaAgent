@@ -18,6 +18,7 @@ import { AgentActionType, AgentKey, AgentSessionStatus } from '../../generated/p
 import { RetrievedField } from '../types';
 import { AlertAction } from '../actions/Alert.action';
 import { CommunityManagerHandler } from './CommunityManager.handler';
+import { TemplateHelper } from '../helpers/Template.helper';
 
 interface CrmSessionState {
   stage: 'confirm_data' | 'capture_data' | 'send_data' | 'complete';
@@ -26,9 +27,9 @@ interface CrmSessionState {
 }
 
 interface RequiredActions {
-  fieldExtractor: AgentActionEntity;
-  notificationService: AgentActionEntity;
-  crmSubmitter: AgentActionEntity;
+  fieldExtractor: AgentActionEntity<'CAPTURE_DATA'>;
+  notificationService: AgentActionEntity<'ALERT'>;
+  crmSubmitter: AgentActionEntity<'EXECUTE_EXTERNAL'>;
 }
 
 @Injectable()
@@ -175,7 +176,7 @@ export class CrmIntegrationHandler {
   /**
    * Validates that all required agent actions exist
    */
-  private validateRequiredActions(actions: AgentActionEntity[]): boolean {
+  private validateRequiredActions(actions: AgentActionEntity<AgentActionType>[]): boolean {
     const allRequiredActionsPresent = this.requiredActions.every((required) =>
       actions.some((a) => a.actionType === required),
     );
@@ -238,11 +239,17 @@ export class CrmIntegrationHandler {
   /**
    * Resolves all required agent actions from the actions list
    */
-  private resolveRequiredActions(actions: AgentActionEntity[]): RequiredActions {
+  private resolveRequiredActions(actions: AgentActionEntity<AgentActionType>[]): RequiredActions {
     return {
-      fieldExtractor: actions.find((a) => a.actionType === AgentActionType.CAPTURE_DATA)!,
-      notificationService: actions.find((a) => a.actionType === AgentActionType.ALERT)!,
-      crmSubmitter: actions.find((a) => a.actionType === AgentActionType.EXECUTE_EXTERNAL)!,
+      fieldExtractor: actions.find(
+        (a) => a.actionType === AgentActionType.CAPTURE_DATA,
+      )! as AgentActionEntity<'CAPTURE_DATA'>,
+      notificationService: actions.find(
+        (a) => a.actionType === AgentActionType.ALERT,
+      )! as AgentActionEntity<'ALERT'>,
+      crmSubmitter: actions.find(
+        (a) => a.actionType === AgentActionType.EXECUTE_EXTERNAL,
+      )! as AgentActionEntity<'EXECUTE_EXTERNAL'>,
     };
   }
 
@@ -288,7 +295,7 @@ export class CrmIntegrationHandler {
     client: ClientEntity;
     targetId: string;
     credential: ClientCredentialEntity;
-    action: AgentActionEntity;
+    action: AgentActionEntity<'CAPTURE_DATA'>;
     conversation: ConversationEntity;
     session: AgentSessionEntity;
   }): Promise<void> {
@@ -393,11 +400,11 @@ export class CrmIntegrationHandler {
     credential,
     isInitial = false,
   }: {
-    action: AgentActionEntity;
+    action: AgentActionEntity<'CAPTURE_DATA'>;
     session: AgentSessionEntity;
     targetId: string;
-    notificationService?: AgentActionEntity;
-    crmSubmitter?: AgentActionEntity;
+    notificationService?: AgentActionEntity<'ALERT'>;
+    crmSubmitter?: AgentActionEntity<'EXECUTE_EXTERNAL'>;
     agent: AgentEntity;
     client: ClientEntity;
     credential: ClientCredentialEntity;
@@ -514,44 +521,42 @@ export class CrmIntegrationHandler {
     messages,
   }: {
     conversation: ConversationEntity;
-    action: AgentActionEntity;
+    action: AgentActionEntity<'EXECUTE_EXTERNAL'>;
     client: ClientEntity;
     credential: ClientCredentialEntity;
     targetId: string;
     agent: AgentEntity;
     session: AgentSessionEntity;
-    notificationService: AgentActionEntity;
+    notificationService: AgentActionEntity<'ALERT'>;
     messages: ConversationMessageEntity[];
   }) {
     const configuration = action.configuration;
-    const urlTarget = configuration.url;
+    const urlTarget = configuration.targetUrl;
     const capturedFields: RetrievedField[] = session.state.capturedFields;
-    const fieldMappings = configuration.fieldMappings;
-
-    const mappedFields = capturedFields.reduce((acc, field) => {
-      const mapping = fieldMappings.find((m) => m.sourceField === field.key);
-      const targetField = mapping ? mapping.targetField : field.key;
-      return {
-        ...acc,
-        [targetField]: field.value,
-      };
-    }, {});
-
     const summary = await this.generationService.generateConversationSummary(messages);
-    if (configuration.uniqueIdentifierField && configuration.uniqueIdentifier) {
-      mappedFields[configuration.uniqueIdentifierField] = configuration.uniqueIdentifier;
+
+    if (configuration.summaryField) {
+      capturedFields.push({
+        key: configuration.summaryField,
+        value: summary,
+        confidence: 1,
+      });
     }
+
+    if (configuration.uniqueIdentifierField && configuration.uniqueIdentifier) {
+      capturedFields.push({
+        key: configuration.uniqueIdentifierField,
+        value: configuration.uniqueIdentifier,
+        confidence: 1,
+      });
+    }
+
+    const mappedBody = TemplateHelper.getTemplateBody(configuration.template, capturedFields);
 
     const response = await fetch(urlTarget, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `${configuration.authHeader}`,
-      },
-      body: JSON.stringify({
-        ...mappedFields,
-        [configuration.summaryField]: `Conversation: ${conversation.conversationId}\n${summary}`,
-      }),
+      headers: configuration.template.headers,
+      body: mappedBody,
     });
 
     if (!response.ok) {
@@ -567,7 +572,7 @@ export class CrmIntegrationHandler {
       );
 
       const clientContext = await this.generationService.simpleGenerate(
-        `Give me a summary of client context based on the following given fields: ${JSON.stringify(mappedFields)}`,
+        `Give me a summary of client context based on the following conversation: ${JSON.stringify(messages)}`,
       );
 
       await this.alertAction.execute({
@@ -681,7 +686,7 @@ export class CrmIntegrationHandler {
     targetId: string;
     client: ClientEntity;
     credential: ClientCredentialEntity;
-    notificationService: AgentActionEntity;
+    notificationService: AgentActionEntity<'ALERT'>;
     agent: AgentEntity;
   }): Promise<void> {
     const generatedReply = await this.generationService.generateResponseWithClientContext({

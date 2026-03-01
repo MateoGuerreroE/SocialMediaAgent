@@ -11,6 +11,7 @@ import { ActionDecisionResponse, AgentDecisionResponse } from './types';
 import { RequiredField, RetrievedField } from 'src/agent/types';
 import { Utils } from 'src/utils';
 import { AgentConfiguration } from 'src/types/nested';
+import { AgentActionType } from '../generated/prisma/enums';
 
 @Injectable()
 export class GenerationService {
@@ -105,7 +106,7 @@ export class GenerationService {
   }
 
   async requestActionDecision(
-    actions: AgentActionEntity[],
+    actions: AgentActionEntity<AgentActionType>[],
     conversationMessages?: ConversationMessageEntity[],
   ): Promise<ActionDecisionResponse> {
     const expectedFormat: ExpectedModelResponseFormat = [

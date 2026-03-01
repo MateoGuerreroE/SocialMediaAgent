@@ -9,7 +9,7 @@ import {
   Platform,
   PlatformChannel,
 } from '../generated/prisma/enums';
-import { AgentConfigOverride, AgentConfiguration, PlatformConfig } from './nested';
+import { ActionConfigMap, AgentConfigOverride, AgentConfiguration, PlatformConfig } from './nested';
 
 export interface ClientEntity {
   clientId: string;
@@ -126,13 +126,13 @@ export interface AgentSessionEntity {
   result: any;
 }
 
-export interface AgentActionEntity {
+export interface AgentActionEntity<T extends AgentActionType> {
   actionId: string;
   agentId: string;
-  actionType: AgentActionType;
+  actionType: T;
   useCase: string;
   isActive: boolean;
-  configuration: any; // TODO TYPE THIS!! -> Depends on the action, for example for an alert action it would be the alert channel, the target, etc.
+  configuration: ActionConfigMap[T];
   createdAt: Date;
   updatedAt: Date;
 }

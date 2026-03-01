@@ -49,14 +49,14 @@ export class PromptService {
     return systemPrompt;
   }
 
-  getSystemPromptForActionDecision(actions: AgentActionEntity[]): string {
+  getSystemPromptForActionDecision(actions: AgentActionEntity<AgentActionType>[]): string {
     const actionContexts = actions.map((action) => {
       switch (action.actionType) {
         case AgentActionType.REPLY:
-          return this.replyActionContext(action);
+          return this.replyActionContext(action as AgentActionEntity<'REPLY'>);
         case AgentActionType.ALERT:
         case AgentActionType.ESCALATE:
-          return this.triggeredActionContext(action);
+          return this.triggeredActionContext(action as AgentActionEntity<'ESCALATE'>);
         default:
           return `
             {
@@ -159,7 +159,7 @@ ${formattedEvents}
     return `You are a alert system agent that takes a reason and a conversation history and crafts an alert message that will be sent to a human through different channels. The message should be concise, clear, and provide enough context for the human to understand the situation without overwhelming them with information.`;
   }
 
-  private replyActionContext(action: AgentActionEntity): string {
+  private replyActionContext(action: AgentActionEntity<'REPLY'>): string {
     const config = action.configuration;
     const examples = config.examples
       ? config.examples.map((ex) => ({
@@ -178,7 +178,7 @@ ${formattedEvents}
     `;
   }
 
-  private triggeredActionContext(action: AgentActionEntity): string {
+  private triggeredActionContext(action: AgentActionEntity<'ESCALATE'>): string {
     const config = action.configuration;
     return `
       {

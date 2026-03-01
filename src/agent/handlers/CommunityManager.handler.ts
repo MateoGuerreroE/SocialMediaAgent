@@ -114,8 +114,8 @@ export class CommunityManagerHandler {
     routingContext,
   }: CMHandlerContext & {
     reason?: string;
-    action: AgentActionEntity;
-    actions?: AgentActionEntity[];
+    action: AgentActionEntity<AgentActionType>;
+    actions?: AgentActionEntity<AgentActionType>[];
   }) {
     switch (action.actionType) {
       case AgentActionType.REPLY:
@@ -131,7 +131,7 @@ export class CommunityManagerHandler {
       case AgentActionType.ALERT:
         await this.handleAlert({
           client,
-          action,
+          action: action as AgentActionEntity<'ALERT'>,
           agent,
           credential,
           reason,
@@ -209,8 +209,8 @@ export class CommunityManagerHandler {
     conversation: ConversationEntity;
     reason?: string;
     credential: ClientCredentialEntity;
-    action: AgentActionEntity;
-    actions?: AgentActionEntity[];
+    action: AgentActionEntity<'ALERT'>;
+    actions?: AgentActionEntity<AgentActionType>[];
     routingContext?: string;
   }) {
     try {
@@ -274,7 +274,7 @@ export class CommunityManagerHandler {
     targetId: string;
     reason?: string;
     credential: ClientCredentialEntity;
-    actions?: AgentActionEntity[];
+    actions?: AgentActionEntity<AgentActionType>[];
   }) {
     try {
       if (!reason || !actions)
@@ -284,7 +284,9 @@ export class CommunityManagerHandler {
           ? `Number: ${conversation.senderId}`
           : (conversation.senderUsername ?? `A client from ${client.businessName}`);
 
-      const alertAction = actions.find((a) => a.actionType === AgentActionType.ALERT);
+      const alertAction = actions.find((a) => a.actionType === AgentActionType.ALERT) as
+        | AgentActionEntity<'ALERT'>
+        | undefined;
       if (alertAction) {
         await this.conversationService.pauseConversation(conversation.conversationId);
 
