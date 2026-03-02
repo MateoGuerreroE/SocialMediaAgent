@@ -167,13 +167,14 @@ export class GenerationService {
     extractionContext?: string,
   ): Promise<RetrievedField[]> {
     const history = this.promptService.formatConversationHistory(conversationMessages);
+    const now = new Date().toISOString();
 
     // System: Role and core extraction behavior (static, reusable)
-    const systemPrompt = `You are a data extraction agent. Your task is to extract specific pieces of information from conversation histories. Handle missing or uncertain data gracefully by adjusting confidence scores accordingly.`;
+    const systemPrompt = `You are a data extraction agent. Your task is to extract specific pieces of information from conversation histories. Handle missing or uncertain data gracefully by adjusting confidence scores accordingly. The current date and time in UTC is: ${now}`;
 
     // Prompt: Conversation context and specific extraction task (dynamic)
     const fieldsDescription = this.promptService.getRequiredFieldsFormat(requiredFields);
-    const prompt = `Extract the following fields from this conversation:\n${history}\n\nFields to extract:\n${fieldsDescription}\n\nFor each field, return a JSON object with:\n- "key": the field identifier (string)\n- "value": the extracted value converted to a string (even for boolean/number types)\n- "confidence": your confidence in the extraction (number between 0 and 1)\n\nIf a field cannot be extracted, set value to an empty string and confidence to 0.${extractionContext ? `\n\nAdditional context for extraction: ${extractionContext}` : ''}`;
+    const prompt = `Extract the following fields from this conversation:\n${history}\n\nFields to extract:\n${fieldsDescription}\n\nFor each field, return a JSON object with:\n- "key": the field identifier (string)\n- "value": the extracted value converted to a string (even for boolean/number types)\n- "confidence": your confidence in the extraction (number between 0 and 1)\n\nIMPORTANT: For fields with type "date", resolve any relative expressions (e.g. "next Tuesday", "mañana", "próximo Martes a las 11 am") using the current date provided above and return the value as a full ISO 8601 string (e.g. "2026-03-03T11:00:00.000Z"). If no timezone is specified by the user, assume UTC.\n\nIf a field cannot be extracted, set value to an empty string and confidence to 0.${extractionContext ? `\n\nAdditional context for extraction: ${extractionContext}` : ''}`;
 
     // Expected format for RetrievedField objects
     const expectedFormat: ExpectedModelResponseFormat = [

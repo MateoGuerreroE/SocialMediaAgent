@@ -26,11 +26,10 @@ export interface ConfirmationConfig {
 }
 
 export interface ExternalApiCallTemplate {
-  call: 'send_crm';
   method: 'GET' | 'POST';
   headers?: Record<string, string>;
-  body: string;
-  variablesMapping: Record<string, string>;
+  payload: string;
+  variablesMapping: Record<string, { key: string; type: 'string' | 'number' | 'boolean' | 'date' }>;
 }
 
 export interface ExecuteExternalActionConfig {
@@ -74,7 +73,8 @@ export interface VerifyExternalActionConfig {
   targetUrl: string;
   expectedStatusCode: number;
   expectedResponseField?: string;
-  expectedResponseValue?: string;
+  expectedResponseValue?: unknown;
+  rejectedResponseValue?: unknown[];
 }
 
 export type EmptyConfig = Record<string, never>;

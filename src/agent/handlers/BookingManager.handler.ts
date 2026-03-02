@@ -70,7 +70,7 @@ export class BookingManagerHandler {
     this.logger.debug(`Actions: ${JSON.stringify(actions, null, 2)}`);
 
     const validActions = actions.filter((a) => a.isActive);
-    const { alert, captureData, verifyExternal } = this.verifyAndExtractActions({
+    const { alert, captureData, verifyExternal, execute } = this.verifyAndExtractActions({
       agent: agentData,
       actions: validActions,
     });
@@ -99,6 +99,7 @@ export class BookingManagerHandler {
           targetId,
           conversation,
           reqActions: {
+            execute,
             alert,
             verifyExternal,
           },
@@ -120,6 +121,18 @@ export class BookingManagerHandler {
         });
         break;
       case 'manage_booking':
+        await this.manageBooking({
+          session,
+          conversation,
+          client,
+          action: captureData,
+          execution: execute,
+          credential,
+          targetId,
+          alert,
+          agent: agentData,
+          isInitial: true,
+        });
       case 'send_confirmation':
         this.logger.error(
           `Session stuck on send_confirmation stage, completing session after possible stuck error`,
@@ -139,12 +152,14 @@ export class BookingManagerHandler {
     client,
     credential,
     conversation,
+    execution,
     targetId,
     alert,
     agent,
     isInitial,
   }: {
     alert: AgentActionEntity<'ALERT'>;
+    execution: AgentActionEntity<'EXECUTE_EXTERNAL'>;
     conversation: ConversationEntity;
     credential: ClientCredentialEntity;
     client: ClientEntity;
@@ -163,7 +178,7 @@ export class BookingManagerHandler {
 
     const bookingContext = action.configuration.confirmationContext;
     const requiredFields = action.configuration.captureRequiredFields;
-    const capturedFields = session.state.confirmedFields;
+    const capturedFields = session.state.bookingFields;
 
     if (isInitial) {
       const requestMessage = await this.generationService.requestDataReply({
@@ -184,6 +199,8 @@ export class BookingManagerHandler {
         agent,
         targetId,
       });
+
+      return;
     }
 
     const missingStartFields = Utils.filterRequiredFields(requiredFields, capturedFields);
@@ -234,7 +251,15 @@ export class BookingManagerHandler {
       });
       session.state = newState;
 
-      // await this.sendConfirmation({ session });
+      await this.sendConfirmation({
+        session,
+        action: execution,
+        conversation,
+        agent,
+        client,
+        credential,
+        alert,
+      });
     }
   }
 
@@ -258,14 +283,25 @@ export class BookingManagerHandler {
     const fullState = session.state as BookingSessionState;
     const { template, targetUrl } = action.configuration;
 
-    const req = await fetch(targetUrl, {
+    const executePayload = TemplateHelper.getTemplateBody(template, [
+      ...fullState.confirmedFields,
+      ...fullState.bookingFields,
+    ]);
+    const executeFetchUrl = template.method === 'GET' ? `${targetUrl}${executePayload}` : targetUrl;
+    const executeFetchBody = template.method === 'POST' ? executePayload : undefined;
+
+    this.logger.debug(
+      `Sending booking confirmation with URL: ${executeFetchUrl} and body: ${executeFetchBody}`,
+    );
+    this.logger.debug(`Headers: ${JSON.stringify(template.headers, null, 2)}`);
+    const req = await fetch(executeFetchUrl, {
       method: template.method,
       headers: template.headers,
-      body: TemplateHelper.getTemplateBody(template, [
-        ...fullState.confirmedFields,
-        ...fullState.bookingFields,
-      ]),
+      body: executeFetchBody,
     });
+
+    const debug = await req.text();
+    this.logger.debug(`Booking confirmation response status: ${debug}`);
 
     if (!req.ok) {
       this.logger.error(`Failed to send confirmation with status ${req.status}`);
@@ -359,6 +395,7 @@ export class BookingManagerHandler {
     reqActions: {
       alert: AgentActionEntity<'ALERT'>;
       verifyExternal: AgentActionEntity<'VERIFY_EXTERNAL'>;
+      execute: AgentActionEntity<'EXECUTE_EXTERNAL'>;
     };
     conversation: ConversationEntity;
   }) {
@@ -447,12 +484,15 @@ export class BookingManagerHandler {
 
       session.state = newState;
 
-      const { alert, verifyExternal } = reqActions;
+      const { alert, verifyExternal, execute } = reqActions;
 
       await this.verifyAvailability({
         action: verifyExternal,
-        capture: captureAction,
-        alert,
+        actions: {
+          alert,
+          capture: captureAction,
+          execute,
+        },
         targetId,
         agent,
         client,
@@ -465,8 +505,7 @@ export class BookingManagerHandler {
 
   async verifyAvailability({
     action,
-    alert,
-    capture,
+    actions,
     agent,
     credential,
     client,
@@ -475,8 +514,11 @@ export class BookingManagerHandler {
     session,
   }: {
     action: AgentActionEntity<'VERIFY_EXTERNAL'>;
-    alert: AgentActionEntity<'ALERT'>;
-    capture: AgentActionEntity<'CAPTURE_DATA'>;
+    actions: {
+      alert: AgentActionEntity<'ALERT'>;
+      capture: AgentActionEntity<'CAPTURE_DATA'>;
+      execute: AgentActionEntity<'EXECUTE_EXTERNAL'>;
+    };
     client: ClientEntity;
     agent: AgentEntity;
     credential: ClientCredentialEntity;
@@ -485,12 +527,23 @@ export class BookingManagerHandler {
     session: AgentSessionEntity;
   }) {
     const { targetUrl, template, expectedStatusCode } = action.configuration;
+    const { alert, capture, execute } = actions;
 
-    const req = await fetch(targetUrl, {
+    const payload = TemplateHelper.getTemplateBody(template, session.state.confirmedFields);
+    const fetchUrl = template.method === 'GET' ? `${targetUrl}${payload}` : targetUrl;
+    const fetchBody = template.method === 'POST' ? payload : undefined;
+
+    this.logger.debug(`Sending booking verification with URL: ${fetchUrl} and body: ${fetchBody}`);
+    this.logger.debug(`Headers: ${JSON.stringify(template.headers, null, 2)}`);
+
+    const req = await fetch(fetchUrl, {
       method: template.method,
       headers: template.headers,
-      body: TemplateHelper.getTemplateBody(template, session.state.confirmedFields),
+      body: fetchBody,
     });
+
+    const debug = await req.text();
+    this.logger.debug(`Booking verification response status: ${debug}`);
 
     if (req.status !== expectedStatusCode) {
       await this.handleError({
@@ -510,6 +563,83 @@ export class BookingManagerHandler {
       this.logger.log(
         `Availability check succeeded with status ${req.status}. Proceeding to manage booking.`,
       );
+
+      const hasExpectedValue = action.configuration.expectedResponseValue !== undefined;
+      const hasRejectedValues =
+        Array.isArray(action.configuration.rejectedResponseValue) &&
+        action.configuration.rejectedResponseValue.length > 0;
+
+      if (hasExpectedValue || hasRejectedValues) {
+        // Resolve the value to check: a specific field or the entire response body
+        let actualValue: unknown;
+        const fieldName = action.configuration.expectedResponseField;
+        if (fieldName) {
+          const resJson = await req.json();
+          this.logger.debug(
+            `Availability check response JSON: ${JSON.stringify(resJson, null, 2)}`,
+          );
+          actualValue = resJson[fieldName];
+        } else {
+          // No specific field — evaluate the whole response
+          try {
+            actualValue = await req.json();
+          } catch {
+            actualValue = await req.text();
+          }
+        }
+        this.logger.debug(`Availability check resolved value: ${JSON.stringify(actualValue)}`);
+
+        // Whitelist check: value must equal expectedResponseValue
+        if (hasExpectedValue) {
+          const matches =
+            JSON.stringify(actualValue) ===
+            JSON.stringify(action.configuration.expectedResponseValue);
+          if (!matches) {
+            this.logger.error(
+              `Availability check value ${JSON.stringify(actualValue)} did not match expected ${JSON.stringify(action.configuration.expectedResponseValue)}.`,
+            );
+            await this.handleError({
+              error: `Availability check failed: expected value ${JSON.stringify(action.configuration.expectedResponseValue)} but got ${JSON.stringify(actualValue)}.`,
+              alertMessage: `User attempted reservation but availability check failed, likely due to lack of availability. Please review the conversation and assist the user manually.`,
+              generationContext: `Generate a message to inform the user that unfortunately the reservation cannot be completed due to unavailability. If there's a booking link, send It to the user so they can try to book by themselves. Apologize for the inconvenience.`,
+              client,
+              session,
+              conversation,
+              agent,
+              targetId,
+              credential,
+              alert,
+            });
+            return;
+          }
+        }
+
+        // Blacklist check: value must NOT appear in rejectedResponseValue
+        if (hasRejectedValues) {
+          const serialised = JSON.stringify(actualValue);
+          const isRejected = (action.configuration.rejectedResponseValue as unknown[]).some(
+            (r) => JSON.stringify(r) === serialised,
+          );
+          if (isRejected) {
+            this.logger.error(
+              `Availability check value ${JSON.stringify(actualValue)} is a rejected value. Treating as failed availability.`,
+            );
+            await this.handleError({
+              error: `Availability check failed: received rejected value ${JSON.stringify(actualValue)}.`,
+              alertMessage: `User attempted reservation but availability check failed, likely due to lack of availability. Please review the conversation and assist the user manually.`,
+              generationContext: `Generate a message to inform the user that unfortunately the reservation cannot be completed due to unavailability. If there's a booking link, send It to the user so they can try to book by themselves. Apologize for the inconvenience.`,
+              client,
+              session,
+              conversation,
+              agent,
+              targetId,
+              credential,
+              alert,
+            });
+            return;
+          }
+        }
+      }
       await this.agentService.updateAgentSession(session.sessionId, {
         state: {
           ...session.state,
@@ -521,6 +651,7 @@ export class BookingManagerHandler {
         session,
         action: capture,
         conversation,
+        execution: execute,
         agent,
         client,
         credential,
@@ -541,6 +672,7 @@ export class BookingManagerHandler {
     alert: AgentActionEntity<'ALERT'>;
     captureData: AgentActionEntity<'CAPTURE_DATA'>;
     verifyExternal: AgentActionEntity<'VERIFY_EXTERNAL'>;
+    execute: AgentActionEntity<'EXECUTE_EXTERNAL'>;
     reply: AgentActionEntity<'REPLY'>;
   } {
     if (!actions.length) {
@@ -568,8 +700,11 @@ export class BookingManagerHandler {
     const reply = actions.find(
       (a) => a.actionType === AgentActionType.REPLY,
     ) as AgentActionEntity<'REPLY'>;
+    const execute = actions.find(
+      (a) => a.actionType === AgentActionType.EXECUTE_EXTERNAL,
+    ) as AgentActionEntity<'EXECUTE_EXTERNAL'>;
 
-    return { alert, captureData, verifyExternal, reply };
+    return { alert, captureData, verifyExternal, reply, execute };
   }
 
   private async getOrCreateSession(
@@ -692,6 +827,9 @@ export class BookingManagerHandler {
 
     await this.agentService.updateAgentSession(session.sessionId, {
       status: AgentSessionStatus.FAILED,
+      endedAt: new Date(),
+      summary: `Alert message: ${alertMessage}`,
+      result: error,
     });
 
     await this.conversationService.updateConversationSession(conversation.conversationId, null);

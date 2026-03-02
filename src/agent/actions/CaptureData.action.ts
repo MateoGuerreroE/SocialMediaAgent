@@ -47,6 +47,20 @@ export class CaptureDataAction {
         continue;
       }
       if (field.confidence > 0.5) {
+        // Validate date fields: value must parse to a valid Date
+        if (requiredField.type === 'date') {
+          const parsed = new Date(field.value);
+          if (isNaN(parsed.getTime())) {
+            this.logger.warn(
+              `Field "${field.key}" with value "${field.value}" could not be parsed as a valid date.`,
+            );
+            continue;
+          }
+          // Normalise to ISO 8601 regardless of what the model returned
+          validFields.push({ ...field, value: parsed.toISOString() });
+          continue;
+        }
+
         const valid = requiredField.validationRegex
           ? new RegExp(requiredField.validationRegex).test(field.value)
           : true;

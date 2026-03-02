@@ -16,7 +16,7 @@ export interface WorkerJobData {
 
 export interface RequiredField {
   key: string;
-  type: 'string' | 'number' | 'boolean';
+  type: 'string' | 'number' | 'boolean' | 'date';
   validationRegex?: string;
   options?: string[];
   isRequired: boolean;
