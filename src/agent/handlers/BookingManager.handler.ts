@@ -28,6 +28,7 @@ interface BookingSessionState {
 export class BookingManagerHandler {
   private readonly requiredActionTypes: AgentActionType[] = [
     AgentActionType.VERIFY_EXTERNAL,
+    AgentActionType.EXECUTE_EXTERNAL,
     AgentActionType.CAPTURE_DATA,
     AgentActionType.REPLY,
     AgentActionType.ALERT,
@@ -65,6 +66,9 @@ export class BookingManagerHandler {
     const agentData = await this.agentService.getAgent(agent.agentId);
     const actions = await this.agentService.getActionsByAgentId(agentData.agentId);
 
+    this.logger.debug(`Agent: ${JSON.stringify(agentData, null, 2)}`);
+    this.logger.debug(`Actions: ${JSON.stringify(actions, null, 2)}`);
+
     const validActions = actions.filter((a) => a.isActive);
     const { alert, captureData, verifyExternal } = this.verifyAndExtractActions({
       agent: agentData,
@@ -78,14 +82,18 @@ export class BookingManagerHandler {
       channel: conversation.channel,
     });
 
+    this.logger.debug(`Merged agent: ${JSON.stringify(agentData, null, 2)}`);
+
     const session = await this.getOrCreateSession(conversation, agentData);
     if (!session) return;
+
+    this.logger.debug(`Session data: ${JSON.stringify(session, null, 2)}`);
 
     switch (session.state.stage) {
       case 'confirm_data':
         await this.confirmData({
           client,
-          agent,
+          agent: agentData,
           captureAction: captureData,
           credential,
           targetId,
@@ -105,7 +113,7 @@ export class BookingManagerHandler {
           generationContext: `Generate a message to inform the user that unfortunately the reservation cannot be completed due to an internal problem. If there's a booking link, send It to the user so they can try to book by themselves. Apologize for the inconvenience.`,
           session,
           conversation,
-          agent,
+          agent: agentData,
           targetId,
           credential,
           alert,
@@ -114,7 +122,7 @@ export class BookingManagerHandler {
       case 'manage_booking':
       case 'send_confirmation':
         this.logger.error(
-          `Session stuck on send_confirmation stage, alert may require manual activation`,
+          `Session stuck on send_confirmation stage, completing session after possible stuck error`,
         );
         this.logger.log(`Defaulting to session completion`);
         await this.conversationService.updateConversationSession(conversation.conversationId, null);
@@ -128,21 +136,209 @@ export class BookingManagerHandler {
   async manageBooking({
     session,
     action,
+    client,
+    credential,
     conversation,
+    targetId,
     alert,
+    agent,
     isInitial,
   }: {
     alert: AgentActionEntity<'ALERT'>;
     conversation: ConversationEntity;
+    credential: ClientCredentialEntity;
+    client: ClientEntity;
+    targetId: string;
+    agent: AgentEntity;
     session: AgentSessionEntity;
     action: AgentActionEntity<'CAPTURE_DATA'>;
     isInitial: boolean;
   }) {
+    if (!conversation.messages || !conversation.messages.length) {
+      this.logger.warn(
+        `No messages found for conversation ${conversation.conversationId} while managing booking.`,
+      );
+      return;
+    }
+
     const bookingContext = action.configuration.confirmationContext;
     const requiredFields = action.configuration.captureRequiredFields;
+    const capturedFields = session.state.confirmedFields;
+
+    if (isInitial) {
+      const requestMessage = await this.generationService.requestDataReply({
+        client,
+        configuration: agent.configuration,
+        conversationMessages: conversation.messages,
+        requiredFields,
+        agentName: agent.name,
+        additionalContext:
+          'You just confirmed availability for a booking, and now you need some additional data to concrete the booking. General context for booking is the following: ' +
+          bookingContext,
+      });
+
+      await this.sendAndLogMessage({
+        message: requestMessage,
+        credential,
+        conversation,
+        agent,
+        targetId,
+      });
+    }
+
+    const missingStartFields = Utils.filterRequiredFields(requiredFields, capturedFields);
+
+    const { retrieved, missing } = await this.captureAction.execute({
+      requiredFields: missingStartFields,
+      extractionContext: bookingContext,
+      messages: conversation.messages,
+    });
+
+    if (missing.length > 0) {
+      const followUpMessage = await this.generationService.requestDataReply({
+        client,
+        conversationMessages: conversation.messages,
+        requiredFields: missing,
+        configuration: agent.configuration,
+        agentName: agent.name,
+        additionalContext: bookingContext,
+      });
+
+      await this.sendAndLogMessage({
+        message: followUpMessage,
+        conversation,
+        agent,
+        targetId,
+        credential,
+      });
+
+      const newState = {
+        ...session.state,
+        bookingFields: [...capturedFields, ...retrieved],
+      };
+
+      await this.agentService.updateAgentSession(session.sessionId, {
+        state: newState,
+      });
+
+      return;
+    } else {
+      this.logger.log(`All required fields received for manage booking step. Completing session.`);
+      const newState = {
+        ...session.state,
+        stage: 'send_confirmation',
+        bookingFields: [...capturedFields, ...retrieved],
+      };
+      await this.agentService.updateAgentSession(session.sessionId, {
+        state: newState,
+      });
+      session.state = newState;
+
+      // await this.sendConfirmation({ session });
+    }
   }
 
-  async sendConfirmation() {}
+  async sendConfirmation({
+    session,
+    action,
+    agent,
+    client,
+    conversation,
+    credential,
+    alert,
+  }: {
+    session: AgentSessionEntity;
+    agent: AgentEntity;
+    conversation: ConversationEntity;
+    credential: ClientCredentialEntity;
+    client: ClientEntity;
+    action: AgentActionEntity<'EXECUTE_EXTERNAL'>;
+    alert: AgentActionEntity<'ALERT'>;
+  }) {
+    const fullState = session.state as BookingSessionState;
+    const { template, targetUrl } = action.configuration;
+
+    const req = await fetch(targetUrl, {
+      method: template.method,
+      headers: template.headers,
+      body: TemplateHelper.getTemplateBody(template, [
+        ...fullState.confirmedFields,
+        ...fullState.bookingFields,
+      ]),
+    });
+
+    if (!req.ok) {
+      this.logger.error(`Failed to send confirmation with status ${req.status}`);
+
+      const alertMessage = await this.generationService.generateAlertMessage(
+        `Failed to send booking confirmation through the booking system. Manual intervention may be required to assist the user. Summarize the following received fields: ${JSON.stringify(fullState, null, 2)}`,
+        agent.configuration.modelTier,
+        conversation.messages,
+      );
+
+      await this.alertAction.execute({
+        generatedMessage: alertMessage,
+        alertChannel: alert.configuration.alertChannel,
+        alertTarget: alert.configuration.alertTarget,
+        clientContext: `Failed at: ${new Date().toISOString()}`,
+      });
+
+      const replyToUser = await this.generationService.generateResponseWithClientContext({
+        client,
+        conversationHistory: conversation.messages,
+        configuration: agent.configuration,
+        agentName: agent.name,
+        promptOverride: `Generate a message to inform the user that unfortunately the reservation cannot be completed due to an internal problem, and the team has been informed. If there's a booking link, send It to the user so they can try to book by themselves. Apologize for the inconvenience.`,
+      });
+
+      await this.sendAndLogMessage({
+        message: replyToUser,
+        conversation,
+        agent,
+        targetId: conversation.senderId,
+        credential,
+      });
+
+      await this.agentService.updateAgentSession(session.sessionId, {
+        status: AgentSessionStatus.FAILED,
+      });
+      await this.conversationService.updateConversationSession(conversation.conversationId, null);
+      return;
+    }
+
+    this.logger.log(`Booking confirmation sent successfully. Completing session.`);
+    const generatedReply = await this.generationService.generateResponseWithClientContext({
+      client,
+      conversationHistory: conversation.messages,
+      configuration: agent.configuration,
+      agentName: agent.name,
+      promptOverride: `Generate a message to inform the user that the reservation has been completed successfully. Include any relevant details about the booking and next steps if applicable.`,
+    });
+
+    await this.sendAndLogMessage({
+      message: generatedReply,
+      conversation,
+      agent,
+      targetId: conversation.senderId,
+      credential,
+    });
+
+    await this.agentService.updateAgentSession(session.sessionId, {
+      status: AgentSessionStatus.COMPLETED,
+    });
+    await this.conversationService.updateConversationSession(conversation.conversationId, null);
+
+    await this.alertAction.execute({
+      generatedMessage: 'NEW BOOKING!',
+      alertChannel: alert.configuration.alertChannel,
+      alertTarget: alert.configuration.alertTarget,
+      clientContext: `A new booking has been completed. Summary of received data: ${JSON.stringify(
+        fullState,
+        null,
+        2,
+      )}`,
+    });
+  }
 
   async confirmData({
     client,
@@ -209,6 +405,9 @@ export class BookingManagerHandler {
       extractionContext: confirmContext,
       messages: conversation.messages,
     });
+
+    this.logger.debug(`Captured fields: ${JSON.stringify(retrieved, null, 2)}`);
+    this.logger.debug(`Missing fields: ${JSON.stringify(missing, null, 2)}`);
 
     if (missing.length > 0) {
       const followUpMessage = await this.generationService.requestDataReply({
@@ -322,6 +521,10 @@ export class BookingManagerHandler {
         session,
         action: capture,
         conversation,
+        agent,
+        client,
+        credential,
+        targetId,
         alert,
         isInitial: true,
       });

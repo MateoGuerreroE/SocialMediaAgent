@@ -1,6 +1,9 @@
 import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { ConsoleLogger } from '@nestjs/common';
 import { Job } from 'bullmq';
+import { BookingManagerHandler } from '../handlers/BookingManager.handler';
+import { WorkerJobData } from '../types';
+import { MessageWindowService } from 'src/messaging/MessageWindow.service';
 
 @Processor('agent-booking-manager', {
   concurrency: 5,
@@ -10,13 +13,24 @@ import { Job } from 'bullmq';
   },
 })
 export class BookingManagerWorker extends WorkerHost {
-  constructor(private readonly logger: ConsoleLogger) {
+  constructor(
+    private readonly logger: ConsoleLogger,
+    private readonly bookingManager: BookingManagerHandler,
+    private readonly messageWindowService: MessageWindowService,
+  ) {
     super();
   }
 
-  async process(job: Job<any>): Promise<void> {
-    this.logger.log(`Handling booking manager event: ${JSON.stringify(job.data, null, 2)}`);
-    return Promise.resolve();
+  async process(job: Job<WorkerJobData>): Promise<void> {
+    this.logger.log(`Processing Booking Manager Job ${job.id} for agent ${job.data.agent.agentId}`);
+    this.logger.debug(`Handling booking manager event: ${JSON.stringify(job.data, null, 2)}`);
+    try {
+      await this.bookingManager.handle(job.data);
+    } catch (e) {
+      this.logger.error(`Unable to process Booking Manager Job: ${e.message}`);
+    } finally {
+      await this.messageWindowService.deleteProcessingKey(job.data.conversation.conversationId);
+    }
   }
 
   @OnWorkerEvent('completed')

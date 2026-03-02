@@ -35,7 +35,7 @@ export class CommunityManagerWorker extends WorkerHost {
         targetId,
       });
     } catch (e) {
-      this.logger.error(`Unable to process Community Manager Job: ${e.message}`, e.stack);
+      this.logger.error(`Unable to process Community Manager Job: ${e.message}`);
     } finally {
       await this.messageWindowService.deleteProcessingKey(conversation.conversationId);
     }

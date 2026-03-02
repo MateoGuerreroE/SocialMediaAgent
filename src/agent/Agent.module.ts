@@ -15,6 +15,8 @@ import { CaptureDataAction } from './actions/CaptureData.action';
 import { EmailHelper } from './helpers/Email.helper';
 import { ConfirmationAssistantHandler } from './handlers/ConfirmationAssistant.handler';
 import { ConfirmAssistantWorker } from './workers/ConfirmAssistant.worker';
+import { BookingManagerHandler } from './handlers/BookingManager.handler';
+import { BookingManagerWorker } from './workers/BookingManager.worker';
 
 @Module({
   imports: [DataModule, GenerationModule, IngressModule, MessagingModule],
@@ -25,6 +27,8 @@ import { ConfirmAssistantWorker } from './workers/ConfirmAssistant.worker';
     CommunityManagerWorker,
     CrmIntegrationHandler,
     CrmIntegrationWorker,
+    BookingManagerHandler,
+    BookingManagerWorker,
     ConfirmationAssistantHandler,
     ConfirmAssistantWorker,
     CommunityManagerHandler,
