@@ -33,7 +33,7 @@ export interface ExternalApiCallTemplate {
   variablesMapping: Record<string, string>;
 }
 
-export interface ExternalActionConfig {
+export interface ExecuteExternalActionConfig {
   template: ExternalApiCallTemplate;
   timeoutMs: number;
   targetUrl: string;
@@ -68,13 +68,22 @@ export interface EscalateActionConfig {
   }>;
 }
 
+export interface VerifyExternalActionConfig {
+  template: ExternalApiCallTemplate;
+  timeoutMs: number;
+  targetUrl: string;
+  expectedStatusCode: number;
+  expectedResponseField?: string;
+  expectedResponseValue?: string;
+}
+
 export type EmptyConfig = Record<string, never>;
 
 export type ActionConfigMap = {
   [AgentActionType.ALERT]: AlertActionConfig;
   [AgentActionType.CAPTURE_DATA]: CaptureDataConfig;
-  [AgentActionType.EXECUTE_EXTERNAL]: ExternalActionConfig;
-  [AgentActionType.VERIFY_EXTERNAL]: ExternalActionConfig;
+  [AgentActionType.EXECUTE_EXTERNAL]: ExecuteExternalActionConfig;
+  [AgentActionType.VERIFY_EXTERNAL]: VerifyExternalActionConfig;
   [AgentActionType.REPLY]: ReplyActionConfig;
   [AgentActionType.COMPLETE]: EmptyConfig;
   [AgentActionType.TRANSFER]: EmptyConfig;

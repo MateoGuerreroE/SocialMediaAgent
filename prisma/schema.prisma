@@ -36,8 +36,8 @@ enum AgentActionType {
   CAPTURE_DATA
   COMPLETE
   TRANSFER
-  VERIFY_EXTERNAL
-  EXECUTE_EXTERNAL
+  VERIFY_EXTERNAL // Fire and evaluate results
+  EXECUTE_EXTERNAL // Fire & Forget
   ESCALATE
 }
 

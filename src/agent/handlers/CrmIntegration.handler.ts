@@ -554,7 +554,7 @@ export class CrmIntegrationHandler {
     const mappedBody = TemplateHelper.getTemplateBody(configuration.template, capturedFields);
 
     const response = await fetch(urlTarget, {
-      method: 'POST',
+      method: configuration.template.method,
       headers: configuration.template.headers,
       body: mappedBody,
     });
@@ -628,6 +628,13 @@ export class CrmIntegrationHandler {
         stage: 'complete',
       },
       result,
+    });
+
+    await this.alertAction.execute({
+      generatedMessage: `New CRM entry created!\n\nSummary of the conversation:\n${summary}`,
+      alertTarget: notificationService.configuration.alertTarget,
+      alertChannel: notificationService.configuration.alertChannel,
+      clientContext: `Message received at: ${new Date().toISOString()}, for platform: ${conversation.platform}, channel: ${conversation.channel}`,
     });
 
     await this.handleComplete({
