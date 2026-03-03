@@ -133,6 +133,7 @@ export class BookingManagerHandler {
           agent: agentData,
           isInitial: true,
         });
+        break;
       case 'send_confirmation':
         this.logger.error(
           `Session stuck on send_confirmation stage, completing session after possible stuck error`,
