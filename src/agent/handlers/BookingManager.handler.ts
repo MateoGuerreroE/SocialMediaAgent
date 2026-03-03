@@ -131,7 +131,7 @@ export class BookingManagerHandler {
           targetId,
           alert,
           agent: agentData,
-          isInitial: true,
+          isInitial: false,
         });
         break;
       case 'send_confirmation':
@@ -211,6 +211,9 @@ export class BookingManagerHandler {
       extractionContext: bookingContext,
       messages: conversation.messages,
     });
+
+    this.logger.debug(`Captured fields: ${JSON.stringify(retrieved, null, 2)}`);
+    this.logger.debug(`Missing fields: ${JSON.stringify(missing, null, 2)}`);
 
     if (missing.length > 0) {
       const followUpMessage = await this.generationService.requestDataReply({
@@ -365,15 +368,17 @@ export class BookingManagerHandler {
     });
     await this.conversationService.updateConversationSession(conversation.conversationId, null);
 
+    const alertSummary = await this.generationService.generateAlertMessage(
+      `A new booking has been completed. Summary of received data: ${JSON.stringify(fullState, null, 2)}`,
+      agent.configuration.modelTier,
+      conversation.messages,
+    );
+
     await this.alertAction.execute({
       generatedMessage: 'NEW BOOKING!',
       alertChannel: alert.configuration.alertChannel,
       alertTarget: alert.configuration.alertTarget,
-      clientContext: `A new booking has been completed. Summary of received data: ${JSON.stringify(
-        fullState,
-        null,
-        2,
-      )}`,
+      clientContext: `A new booking has been completed. Summary of reservation interaction: \n\n${alertSummary}`,
     });
   }
 
@@ -543,8 +548,8 @@ export class BookingManagerHandler {
       body: fetchBody,
     });
 
-    const debug = await req.text();
-    this.logger.debug(`Booking verification response status: ${debug}`);
+    const debug = await req.json();
+    this.logger.debug(`Booking verification response status: ${JSON.stringify(debug, null, 2)}`);
 
     if (req.status !== expectedStatusCode) {
       await this.handleError({
@@ -569,6 +574,9 @@ export class BookingManagerHandler {
       const hasRejectedValues =
         Array.isArray(action.configuration.rejectedResponseValue) &&
         action.configuration.rejectedResponseValue.length > 0;
+
+      this.logger.debug(`Has expected value check: ${hasExpectedValue}`);
+      this.logger.debug(`Has rejected values check: ${hasRejectedValues}`);
 
       if (hasExpectedValue || hasRejectedValues) {
         // Resolve the value to check: a specific field or the entire response body
