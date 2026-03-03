@@ -259,6 +259,7 @@ export class BookingManagerHandler {
         session,
         action: execution,
         conversation,
+        targetId,
         agent,
         client,
         credential,
@@ -272,6 +273,7 @@ export class BookingManagerHandler {
     action,
     agent,
     client,
+    targetId,
     conversation,
     credential,
     alert,
@@ -281,6 +283,7 @@ export class BookingManagerHandler {
     conversation: ConversationEntity;
     credential: ClientCredentialEntity;
     client: ClientEntity;
+    targetId: string;
     action: AgentActionEntity<'EXECUTE_EXTERNAL'>;
     alert: AgentActionEntity<'ALERT'>;
   }) {
@@ -335,7 +338,7 @@ export class BookingManagerHandler {
         message: replyToUser,
         conversation,
         agent,
-        targetId: conversation.senderId,
+        targetId,
         credential,
       });
 
@@ -359,7 +362,7 @@ export class BookingManagerHandler {
       message: generatedReply,
       conversation,
       agent,
-      targetId: conversation.senderId,
+      targetId,
       credential,
     });
 
