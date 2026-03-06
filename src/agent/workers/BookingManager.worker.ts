@@ -4,6 +4,8 @@ import { Job } from 'bullmq';
 import { BookingManagerHandler } from '../handlers/BookingManager.handler';
 import { WorkerJobData } from '../types';
 import { MessageWindowService } from 'src/messaging/MessageWindow.service';
+import { Metrics } from 'src/utils/metrics';
+import { AgentKey } from 'src/generated/prisma/enums';
 
 @Processor('agent-booking-manager', {
   concurrency: 5,
@@ -25,10 +27,13 @@ export class BookingManagerWorker extends WorkerHost {
     this.logger.log(`Processing Booking Manager Job ${job.id} for agent ${job.data.agent.agentId}`);
     try {
       await this.bookingManager.handle(job.data);
+      Metrics.recordSuccessfulAgentExecution(AgentKey.BOOKING_MANAGER);
     } catch (e) {
       this.logger.error(`Unable to process Booking Manager Job: ${e.message}`);
+      Metrics.recordAgentExecutionError(AgentKey.BOOKING_MANAGER);
     } finally {
       await this.messageWindowService.deleteProcessingKey(job.data.conversation.conversationId);
+      Metrics.endProcessingTimer(job.data.conversation.conversationId);
     }
   }
 

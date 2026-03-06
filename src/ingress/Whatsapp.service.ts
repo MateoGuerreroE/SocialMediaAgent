@@ -28,6 +28,7 @@ import {
 import { SocialMediaEvent } from 'src/types/messages';
 import { Utils } from 'src/utils';
 import { NotFoundError } from '../types/errors';
+import { Metrics } from 'src/utils/metrics';
 
 @Injectable()
 export class WhatsappService implements OnModuleInit, OnModuleDestroy {
@@ -129,6 +130,8 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       jobId: event.messageId,
       removeOnComplete: { age: 60 },
     });
+
+    Metrics.recordMessageProcessed(Platform.WHATSAPP, PlatformChannel.DIRECT_MESSAGE);
   }
 
   getSocket(clientId: string): WASocket | null {
@@ -255,6 +258,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     });
 
     sock.ev.on('messages.upsert', async ({ messages }) => {
+      Metrics.recordMessageReceived(Platform.WHATSAPP, PlatformChannel.DIRECT_MESSAGE);
       if (this.startupGracePeriodMs > 0) {
         const timeSinceStartup = Date.now() - this.startupTimestamp;
         if (timeSinceStartup < this.startupGracePeriodMs) {
@@ -280,7 +284,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       if (parsed) {
         this.logger.log(`Received whatsapp message`);
         if (parsed.metadata.source === MessageSource.AD) {
-          this.logger.debug(`AD MESSAGE: ${JSON.stringify(parsed, null, 2)}`);
+          this.logger.debug(`Whatsapp AD Message Received`);
         }
         await this.sendToOrchestration(parsed);
         return;
@@ -439,7 +443,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
 
     if (!isValid) {
       this.logger.warn('Received unsupported message type, skipping.');
-      this.logger.debug(`Unsupported message details: ${JSON.stringify(msg)}`);
+      this.logger.debug(`Unsupported message details: ${JSON.stringify(msg, null, 2)}`);
       return null;
     }
 

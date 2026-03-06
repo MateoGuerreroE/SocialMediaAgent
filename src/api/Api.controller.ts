@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Res } from '@nestjs/common';
 import { ApiService } from './Api.service';
 import {
   CreateClientDTO,
@@ -8,6 +8,8 @@ import {
   UpdateClientEventDTO,
   UpdateCredentialDTO,
 } from '../types/transactions';
+import { Metrics } from 'src/utils/metrics';
+import type { Response } from 'express';
 
 @Controller('api')
 export class ApiController {
@@ -63,5 +65,11 @@ export class ApiController {
   @Delete('client/credential/:credentialId')
   async deleteCredential(@Param('credentialId') credentialId: string) {
     return this.apiService.deleteCredential(credentialId);
+  }
+
+  @Get('metrics')
+  async getMetrics(@Res() res: Response) {
+    res.set('Content-Type', Metrics.registry.contentType);
+    res.end(await Metrics.registry.metrics());
   }
 }

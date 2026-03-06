@@ -15,6 +15,9 @@ import {
   Platform,
   PlatformChannel,
 } from '../generated/prisma/enums';
+import { KnownUnhandledMessageError } from 'src/types/errors';
+import { Metrics } from 'src/utils/metrics';
+import { Utils } from 'src/utils';
 
 @Injectable()
 export class WebhookRoutingService {
@@ -25,6 +28,7 @@ export class WebhookRoutingService {
 
   async routeInstagramEvent(event: InstagramEvent): Promise<void> {
     this.logger.log(`Received Instagram event for account ${event.id}`);
+    Metrics.recordMessageReceived(Platform.INSTAGRAM, Utils.resolveMetaPlatformChannel(event));
     try {
       const parsedEvent = this.parseInstagramEvent(event);
       if (!parsedEvent) {
@@ -34,6 +38,11 @@ export class WebhookRoutingService {
 
       await this.sendToOrchestrationQueue(parsedEvent);
     } catch (e) {
+      if (e instanceof KnownUnhandledMessageError) {
+        this.logger.warn(`Known unhandled Instagram event: ${e.message}`);
+        return;
+      }
+      Metrics.recordIngressError(Platform.INSTAGRAM, Utils.resolveMetaPlatformChannel(event));
       this.logger.warn(
         `Failed to parse Instagram event ${JSON.stringify(event, null, 2)}: ${e instanceof Error ? e.message : String(e)}`,
       );
@@ -43,7 +52,7 @@ export class WebhookRoutingService {
 
   async routeFacebookEvent(event: FacebookEvent) {
     this.logger.log(`Received Facebook event for account ${event.id}`);
-
+    Metrics.recordMessageReceived(Platform.FACEBOOK, Utils.resolveMetaPlatformChannel(event));
     try {
       const parsedEvent = this.parseFacebookEvent(event);
       if (!parsedEvent) {
@@ -53,6 +62,11 @@ export class WebhookRoutingService {
 
       await this.sendToOrchestrationQueue(parsedEvent);
     } catch (e) {
+      if (e instanceof KnownUnhandledMessageError) {
+        this.logger.warn(`Known unhandled Facebook event: ${e.message}`);
+        return;
+      }
+      Metrics.recordIngressError(Platform.FACEBOOK, Utils.resolveMetaPlatformChannel(event));
       this.logger.warn(
         `Failed to parse Facebook event ${JSON.stringify(event, null, 2)}: ${e instanceof Error ? e.message : String(e)}`,
       );
@@ -71,6 +85,8 @@ export class WebhookRoutingService {
       attempts: 1,
       removeOnComplete: { age: 60 },
     });
+
+    Metrics.recordMessageProcessed(event.platform, event.channel);
   };
 
   private parseInstagramEvent(payload: InstagramEvent): SocialMediaEvent | null {
@@ -79,16 +95,16 @@ export class WebhookRoutingService {
       // Instagram Comment
       const senderId = payload.changes[0]?.value?.from?.id;
       if (!senderId) {
-        throw new Error('Sender ID not found in Instagram comment message');
+        throw new KnownUnhandledMessageError('Sender ID not found in Instagram comment message');
       }
 
       if (!payload.changes || payload.changes.length === 0) {
-        throw new Error('No changes found in comment message');
+        throw new KnownUnhandledMessageError('No changes found in comment message');
       }
 
       const igContents = payload.changes[0];
       if (!igContents.value?.text || igContents.value?.text?.length === 0) {
-        throw new Error('Unable to find text content in the comment');
+        throw new KnownUnhandledMessageError('Unable to find text content in the comment');
       }
 
       const commentPayload: SocialMediaEvent = {
@@ -127,22 +143,22 @@ export class WebhookRoutingService {
       // Facebook Comment
       const senderId = payload.changes[0]?.value?.from?.id;
       if (!senderId) {
-        throw new Error('Sender ID not found in Facebook comment message');
+        throw new KnownUnhandledMessageError('Sender ID not found in Facebook comment message');
       }
 
       if (!payload.changes || payload.changes.length === 0) {
-        throw new Error('No changes found in comment message');
+        throw new KnownUnhandledMessageError('No changes found in comment message');
       }
 
       const fbContents = payload.changes[0];
       if (fbContents.value.item !== 'comment') {
-        throw new Error(
+        throw new KnownUnhandledMessageError(
           `Unsupported Facebook comment item type: ${fbContents.value.item as string}`,
         );
       }
 
       if (!fbContents.value?.message && fbContents.value.verb !== 'remove') {
-        throw new Error('Unable to find text content in the comment');
+        throw new KnownUnhandledMessageError('Unable to find text content in the comment');
       }
 
       const commentPayload: SocialMediaEvent = {

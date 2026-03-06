@@ -19,6 +19,7 @@ import { AgentLogRepository } from 'src/data/repository';
 import { WorkerJobData } from 'src/agent/types';
 import { Utils } from 'src/utils';
 import { AgentService } from 'src/agent/Agent.service';
+import { Metrics } from 'src/utils/metrics';
 
 @Injectable()
 export class OrchestrationService {
@@ -127,6 +128,12 @@ export class OrchestrationService {
         messageId: event.messageId,
       });
 
+      Metrics.startProcessingTimer(conversation.conversationId, {
+        agent_key: selectedAgent.agentKey,
+        platform: event.platform,
+        channel: event.channel,
+      });
+
       await this.routeToQueue({
         targetId: event.targetId,
         agent: selectedAgent,
@@ -142,6 +149,7 @@ export class OrchestrationService {
         this.logger.warn(`Early termination: ${e.message}`);
         return;
       }
+      Metrics.recordOrchestrationError(event.platform, event.channel);
       this.logger.error(`Error orchestrating event: ${e.message}`);
     }
   }

@@ -4,6 +4,8 @@ import { Job } from 'bullmq';
 import { WorkerJobData } from '../types';
 import { CrmIntegrationHandler } from '../handlers/CrmIntegration.handler';
 import { MessageWindowService } from 'src/messaging/MessageWindow.service';
+import { Metrics } from 'src/utils/metrics';
+import { AgentKey } from 'src/generated/prisma/enums';
 
 @Processor('agent-crm-integration', {
   concurrency: 5,
@@ -33,10 +35,13 @@ export class CrmIntegrationWorker extends WorkerHost {
         agent,
         targetId,
       });
+      Metrics.recordSuccessfulAgentExecution(AgentKey.CRM_INTEGRATION);
     } catch (e) {
       this.logger.error(`Unable to process CRM Integration Job: ${e.message}`);
+      Metrics.recordAgentExecutionError(AgentKey.CRM_INTEGRATION);
     } finally {
       await this.messageWindowService.deleteProcessingKey(conversation.conversationId);
+      Metrics.endProcessingTimer(conversation.conversationId);
     }
   }
 

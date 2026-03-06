@@ -6,6 +6,7 @@ import { CredentialType, Platform, PlatformChannel } from 'src/generated/prisma/
 import { RequiredField, RetrievedField } from '../agent/types';
 import { AgentEntity } from 'src/types/entities';
 import { ConsoleLogger } from '@nestjs/common';
+import { FacebookEvent, InstagramEvent } from 'src/ingress/types';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -179,5 +180,9 @@ export class Utils {
           throw new Error(`Unsupported field type: ${field.type as string}`);
       }
     }
+  }
+
+  static resolveMetaPlatformChannel(event: InstagramEvent | FacebookEvent): PlatformChannel {
+    return 'changes' in event ? PlatformChannel.COMMENT : PlatformChannel.DIRECT_MESSAGE;
   }
 }

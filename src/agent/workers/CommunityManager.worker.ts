@@ -4,6 +4,8 @@ import { Job } from 'bullmq';
 import { CommunityManagerHandler } from '../handlers/CommunityManager.handler';
 import { WorkerJobData } from '../types';
 import { MessageWindowService } from 'src/messaging/MessageWindow.service';
+import { Metrics } from 'src/utils/metrics';
+import { AgentKey } from 'src/generated/prisma/enums';
 
 @Processor('agent-community-manager', {
   concurrency: 5,
@@ -34,10 +36,13 @@ export class CommunityManagerWorker extends WorkerHost {
         agent,
         targetId,
       });
+      Metrics.recordSuccessfulAgentExecution(AgentKey.COMMUNITY_MANAGER);
     } catch (e) {
       this.logger.error(`Unable to process Community Manager Job: ${e.message}`);
+      Metrics.recordAgentExecutionError(AgentKey.COMMUNITY_MANAGER);
     } finally {
       await this.messageWindowService.deleteProcessingKey(conversation.conversationId);
+      Metrics.endProcessingTimer(conversation.conversationId);
     }
   }
 
