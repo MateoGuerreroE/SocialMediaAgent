@@ -3,6 +3,7 @@ import {
   AgentActionEntity,
   AgentEntity,
   ClientEntity,
+  ClientEventEntity,
   ConversationMessageEntity,
 } from '../types/entities';
 import { ExpectedModelResponseFormat, GenerationModel } from './models/model';
@@ -42,7 +43,37 @@ export class GenerationService {
     );
     const history = this.promptService.formatConversationHistory(conversationHistory);
 
-    const prompt = `${promptOverride ?? 'Given the following conversation, provide the client an appropiate response:'}${history}${client.events?.length ? '\n\n' + this.promptService.getClientEventsPrompt(client.events) : ''}`;
+    let shouldIncludeEvents = false;
+    const clientEvents: ClientEventEntity[] = client.events ?? [];
+    if (clientEvents.length) {
+      const lastUserMessage = conversationHistory![0].content;
+
+      const eventSummary = clientEvents
+        .map((e) => `- ${e.eventName} (${e.recurrence}): ${e.description}`)
+        .join('\n');
+
+      const eventInclusion = await this.model.sendToModel({
+        systemPrompt:
+          'You are a classifier that decides whether a list of events/promotions should be shown to a user. Return true if: (1) the user is asking about events, promotions, or availability in general, OR (2) any listed event is specifically relevant to what the user asked. Return false only if the message is clearly unrelated to events.',
+        prompt: `User message: "${lastUserMessage}"\n\nAvailable events:\n${eventSummary}\n\nShould the events list be included in the response?`,
+        modelTier: 0,
+        expectedFormat: [{ key: 'relevant', type: 'boolean' }],
+      });
+
+      this.logger.debug(
+        `Event relevance response for client ${client.clientId}: ${eventInclusion}`,
+      );
+
+      shouldIncludeEvents =
+        Utils.parseModelResponse<{ relevant: boolean }>(eventInclusion, [
+          { key: 'relevant', type: 'boolean' },
+        ])?.relevant === true;
+    }
+
+    const eventsBlock = shouldIncludeEvents
+      ? '\n\n' + this.promptService.getClientEventsPrompt(clientEvents)
+      : '';
+    const prompt = `${promptOverride ?? 'Given the following conversation, provide the client an appropiate response:'}${history}${eventsBlock}`;
 
     const generatedResponse = await this.model.sendToModel({
       prompt,

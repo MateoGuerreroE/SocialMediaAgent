@@ -76,10 +76,12 @@ export class GeminiModel implements GenerationModel {
 
   private resolveModelName(modelTier: number): string {
     switch (modelTier) {
+      case 0:
+        return 'gemini-2.5-flash-lite';
       case 1:
         return 'gemini-2.5-flash';
       case 2:
-        return 'gemini-3-pro-preview';
+        return 'gemini-3.1-pro-preview';
       default:
         return 'gemini-2.5-flash';
     }
