@@ -82,8 +82,6 @@ export class BookingManagerHandler {
       channel: conversation.channel,
     });
 
-    this.logger.debug(`Merged agent: ${JSON.stringify(agentData, null, 2)}`);
-
     const session = await this.getOrCreateSession(conversation, agentData);
     if (!session) return;
 
@@ -300,7 +298,6 @@ export class BookingManagerHandler {
     this.logger.debug(
       `Sending booking confirmation with URL: ${executeFetchUrl} and body: ${executeFetchBody}`,
     );
-    this.logger.debug(`Headers: ${JSON.stringify(template.headers, null, 2)}`);
     const req = await fetch(executeFetchUrl, {
       method: template.method,
       headers: template.headers,
@@ -543,7 +540,6 @@ export class BookingManagerHandler {
     const fetchBody = template.method === 'POST' ? payload : undefined;
 
     this.logger.debug(`Sending booking verification with URL: ${fetchUrl} and body: ${fetchBody}`);
-    this.logger.debug(`Headers: ${JSON.stringify(template.headers, null, 2)}`);
 
     const req = await fetch(fetchUrl, {
       method: template.method,

@@ -23,7 +23,6 @@ export class BookingManagerWorker extends WorkerHost {
 
   async process(job: Job<WorkerJobData>): Promise<void> {
     this.logger.log(`Processing Booking Manager Job ${job.id} for agent ${job.data.agent.agentId}`);
-    this.logger.debug(`Handling booking manager event: ${JSON.stringify(job.data, null, 2)}`);
     try {
       await this.bookingManager.handle(job.data);
     } catch (e) {

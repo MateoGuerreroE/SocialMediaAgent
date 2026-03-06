@@ -120,16 +120,12 @@ export class OrchestrationService {
         return;
       }
 
-      this.logger.debug(`Available agents: ${JSON.stringify(client.agents, null, 2)}`);
-
       const selectedAgent = await this.requireAgentDecision({
         agents: client.agents!,
         conversation,
         message: event.content.text,
         messageId: event.messageId,
       });
-
-      this.logger.debug(`Selected agent: ${JSON.stringify(selectedAgent, null, 2)}`);
 
       await this.routeToQueue({
         targetId: event.targetId,
