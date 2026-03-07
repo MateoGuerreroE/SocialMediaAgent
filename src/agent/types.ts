@@ -5,6 +5,7 @@ import {
   ConversationEntity,
   ClientCredentialEntity,
 } from 'src/types/entities';
+import { SocialMediaEvent } from '../types/messages';
 
 export interface WorkerJobData {
   client: ClientEntity;
@@ -32,6 +33,7 @@ export interface ConfirmationAssistantData {
   platform: ClientPlatformEntity;
   client: ClientEntity;
   targetId: string;
+  event: SocialMediaEvent;
   credential: ClientCredentialEntity;
   conversation: ConversationEntity;
 }

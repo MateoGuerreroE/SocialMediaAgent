@@ -17,9 +17,10 @@ import { ConfirmationAssistantHandler } from './handlers/ConfirmationAssistant.h
 import { ConfirmAssistantWorker } from './workers/ConfirmAssistant.worker';
 import { BookingManagerHandler } from './handlers/BookingManager.handler';
 import { BookingManagerWorker } from './workers/BookingManager.worker';
+import { QueueModule } from '../queue/Queue.module';
 
 @Module({
-  imports: [DataModule, GenerationModule, IngressModule, MessagingModule],
+  imports: [DataModule, GenerationModule, IngressModule, MessagingModule, QueueModule],
   providers: [
     EmailHelper,
     AgentService,

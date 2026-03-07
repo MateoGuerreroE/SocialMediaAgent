@@ -86,7 +86,7 @@ export class GenerationService {
 
   async requestAgentDecision(
     agents: AgentEntity[],
-    content: string,
+    messages: ConversationMessageEntity[],
   ): Promise<AgentDecisionResponse> {
     const expectedFormat: ExpectedModelResponseFormat = [
       {
@@ -104,8 +104,10 @@ export class GenerationService {
       },
     ];
 
+    const history = this.promptService.formatConversationHistory(messages);
+
     const systemPrompt = this.promptService.getAgentDecisionSystemPrompt(agents);
-    const prompt = `Given the following message: "${content}", decide which agent should handle this conversation. Respond with the agentKey of the chosen agent, a decision score between 0 and 1 indicating your confidence in the decision, and a brief reason for your choice (Max 80 characters).`;
+    const prompt = `Given the following conversation (last 4 messages):\n\n${history}\n\nDecide which agent should handle this conversation. Respond with the agentKey of the chosen agent, a decision score between 0 and 1 indicating your confidence in the decision, and a brief reason for your choice (Max 80 characters).`;
 
     const generatedResult = await this.model.sendToModel({
       prompt,

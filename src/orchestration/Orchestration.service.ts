@@ -52,7 +52,7 @@ export class OrchestrationService {
       const messageExists = await this.conversationService.checkIfMessageExists(
         event.metadata.externalId,
       );
-      if (messageExists) {
+      if (messageExists && !event.isRouting) {
         this.logger.warn(
           `Message with externalId ${event.metadata.externalId} already exists. Skipping processing.`,
         );
@@ -97,10 +97,13 @@ export class OrchestrationService {
         return;
       }
 
-      if (event.channel === PlatformChannel.DIRECT_MESSAGE) {
-        await this.bufferDMMessageForConversation(conversation, event);
+      if (!event.isRouting) {
+        if (event.channel === PlatformChannel.DIRECT_MESSAGE) {
+          await this.bufferDMMessageForConversation(conversation, event);
+        }
+
+        await this.conversationService.addUserMessage(conversation, event);
       }
-      await this.conversationService.addUserMessage(conversation, event);
 
       if (platform.requiresConfirmation && conversation.isConfirmed === null) {
         this.logger.warn(
@@ -110,7 +113,7 @@ export class OrchestrationService {
           'handleConfirmation',
           {
             conversation,
-            client,
+            event,
             platform,
             credential,
             targetId: event.targetId,
@@ -124,7 +127,6 @@ export class OrchestrationService {
       const selectedAgent = await this.requireAgentDecision({
         agents: client.agents!,
         conversation,
-        message: event.content.text,
         messageId: event.messageId,
       });
 
@@ -201,12 +203,10 @@ export class OrchestrationService {
   async requireAgentDecision({
     agents,
     conversation,
-    message,
     messageId,
   }: {
     agents: AgentEntity[];
     conversation: ConversationEntity;
-    message: string;
     messageId: string;
   }): Promise<AgentEntity> {
     if (conversation.session) {
@@ -239,7 +239,10 @@ export class OrchestrationService {
       return activeAgents[0];
     }
 
-    const decision = await this.generationService.requestAgentDecision(activeAgents, message);
+    const decision = await this.generationService.requestAgentDecision(
+      activeAgents,
+      conversation.messages?.slice(0, 4) || [],
+    );
 
     const selectedAgent = activeAgents.find((agent) => agent.agentKey === decision.agent);
     if (!selectedAgent) {
@@ -259,7 +262,7 @@ export class OrchestrationService {
       decisionScore: decision.decisionScore,
       reason: decision.reason,
       conversationId: conversation.conversationId,
-      message,
+      message: conversation.messages?.[0]?.content || '',
     });
 
     return selectedAgent;

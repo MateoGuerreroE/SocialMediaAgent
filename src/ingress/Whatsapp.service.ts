@@ -258,6 +258,10 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     });
 
     sock.ev.on('messages.upsert', async ({ messages }) => {
+      this.logger.debug(
+        `[${clientId}] messages.upsert event received: ${messages.length} message(s)`,
+      );
+
       Metrics.recordMessageReceived(Platform.WHATSAPP, PlatformChannel.DIRECT_MESSAGE);
       if (this.startupGracePeriodMs > 0) {
         const timeSinceStartup = Date.now() - this.startupTimestamp;
@@ -288,6 +292,10 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
         }
         await this.sendToOrchestration(parsed);
         return;
+      } else {
+        this.logger.debug(
+          `[${clientId}] Message was filtered out by mapToSocialMediaEvent (likely from self, group, or invalid type)`,
+        );
       }
     });
 
@@ -435,7 +443,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     accountId: string;
   }): SocialMediaEvent | null {
     if (msg.key?.fromMe) {
-      // Message from self (agent response echo) - skip silently
+      this.logger.debug('Skipping message from self (fromMe=true)');
       return null;
     }
 

@@ -5,12 +5,11 @@ import { ConversationService } from '../../messaging';
 import { GenerationService } from '../../generation';
 import { CommunityManagerHandler } from './CommunityManager.handler';
 import { AgentKey } from '../../generated/prisma/enums';
-import {
-  ClientEntity,
-  ClientPlatformEntity,
-  ConversationEntity,
-  ClientCredentialEntity,
-} from 'src/types/entities';
+import { ConversationEntity, ClientCredentialEntity } from 'src/types/entities';
+import { Queue } from 'bullmq';
+import { InjectQueue } from '@nestjs/bullmq';
+import { SocialMediaEvent } from '../../types/messages';
+import { Utils } from '../../utils';
 
 @Injectable()
 export class ConfirmationAssistantHandler {
@@ -20,15 +19,10 @@ export class ConfirmationAssistantHandler {
     private readonly generationService: GenerationService,
     private readonly conversationService: ConversationService,
     private readonly communityManagerHandler: CommunityManagerHandler,
+    @InjectQueue('orchestration') private readonly orchestrationQueue: Queue,
   ) {}
 
-  async handle({
-    platform,
-    conversation,
-    targetId,
-    credential,
-    client,
-  }: ConfirmationAssistantData) {
+  async handle({ event, platform, conversation, targetId, credential }: ConfirmationAssistantData) {
     if (!conversation.messages || conversation.messages.length === 0) {
       this.logger.warn(`No messages found in conversation ${conversation.conversationId}`);
       return;
@@ -41,10 +35,7 @@ export class ConfirmationAssistantHandler {
       );
       await this.executeConfirmedPath({
         conversation,
-        targetId,
-        credential,
-        client,
-        platform,
+        event,
       });
       return;
     }
@@ -90,10 +81,7 @@ export class ConfirmationAssistantHandler {
         } else {
           await this.executeConfirmedPath({
             conversation,
-            targetId,
-            credential,
-            client,
-            platform,
+            event,
           });
         }
         break;
@@ -147,27 +135,27 @@ export class ConfirmationAssistantHandler {
 
   private async executeConfirmedPath({
     conversation,
-    targetId,
-    credential,
-    client,
-    platform,
+    event,
   }: {
     conversation: ConversationEntity;
-    targetId: string;
-    client: ClientEntity;
-    platform: ClientPlatformEntity;
-    credential: ClientCredentialEntity;
+    event: SocialMediaEvent;
   }) {
     this.logger.log(`User confirmed conversation, routing to community manager`);
     await this.conversationService.confirmConversation(conversation.conversationId, true);
+    event.metadata.externalId = `${event.metadata.externalId}-confirmed`;
 
-    await this.routeToCommunityManager({
-      client,
-      platform,
-      conversation,
-      credential,
-      targetId,
-    });
+    await this.orchestrationQueue.add(
+      'confirmation_routing',
+      {
+        ...event,
+        isRouting: true,
+      },
+      {
+        jobId: Utils.generateUUID(),
+        attempts: 1,
+        removeOnComplete: { age: 60 },
+      },
+    );
   }
 
   private async executeFlaggedPath({

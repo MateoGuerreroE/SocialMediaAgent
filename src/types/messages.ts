@@ -20,6 +20,7 @@ export interface SocialMediaEvent {
   targetId: string; // Either senderId or commentId -> This is where the system needs to send the response to
   content: SocialMediaEventContent;
   timestamp: number;
+  isRouting?: boolean; // Flag to indicate if this event is for routing purposes (e.g., after confirmation)
   platform: Platform;
   channel: PlatformChannel;
   metadata: SocialMediaEventMetadata;
